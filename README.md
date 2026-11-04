@@ -10,3 +10,5 @@ Professeur particulier propulsé par Claude, en une seule page web (`index.html`
 
 NotebookLM n'a pas d'API publique : exporte/copie tes notes ou ton guide d'étude et colle-les.
 Tout est stocké en local dans le navigateur (localStorage).
+
+Test (sans clé API, API simulée) : `node tests/e2e.js` (nécessite Playwright).
