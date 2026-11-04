@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prof Perso</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<style>
+  :root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1f; --mute:#6b6b70; --acc:#3b5bdb; --line:#e3e3e0; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161618; --card:#212124; --fg:#eee; --mute:#a0a0a8; --acc:#7b93ff; --line:#333338; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:16px; }
+  section, details.bloc { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin:12px 0; }
+  details.bloc > summary { font-weight:600; font-size:1.1em; cursor:pointer; }
+  .ex { border-top:1px dashed var(--line); padding-top:12px; margin-top:12px; }
+  button, label.btn { background:var(--acc); color:#fff; border:0; border-radius:8px; padding:8px 12px; font:inherit; cursor:pointer; display:inline-block; margin:4px 4px 0 0; }
+  button.ghost { background:transparent; color:var(--acc); border:1px solid var(--acc); }
+  button:disabled { opacity:.5; cursor:wait; }
+  input[type=password], textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  textarea { min-height:90px; }
+  .mute { color:var(--mute); font-size:.9em; }
+  .corr { background:var(--bg); border-radius:8px; padding:10px; margin-top:8px; }
+  #status { position:sticky; top:0; background:var(--acc); color:#fff; padding:6px 12px; border-radius:8px; display:none; }
+  img, pre { max-width:100%; overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Prof Perso</h1>
+  <div id="status" role="status"></div>
+
+  <section>
+    <h2>1. Clé API Claude</h2>
+    <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
+    <p class="mute">Stockée uniquement dans ce navigateur (localStorage), envoyée seulement à api.anthropic.com.</p>
+  </section>
+
+  <section>
+    <h2>2. Ton cours</h2>
+    <p>Téléverse tes cours (PDF, photos, .txt/.md) <b>et/ou</b> colle le contenu exporté de NotebookLM (notes, guide d'étude, résumé).</p>
+    <label class="btn">Choisir des fichiers<input id="files" type="file" multiple accept=".pdf,image/*,.txt,.md" hidden></label>
+    <span id="fileNames" class="mute"></span>
+    <textarea id="paste" placeholder="Colle ici le texte de NotebookLM ou ton cours…"></textarea>
+    <button id="go">Restructurer en blocs</button>
+  </section>
+
+  <div id="course"></div>
+</main>
+
+<script type="module">
+import Anthropic from "https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@1.4.0/+esm";
+import { marked } from "https://cdn.jsdelivr.net/npm/marked@12.0.2/+esm";
+import DOMPurify from "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/+esm";
+import renderMathInElement from "https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.mjs";
+
+const MODEL = "claude-opus-5-5";
+const $ = (id) => document.getElementById(id);
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+$("key").value = store.get("key") || "";
+$("key").onchange = () => store.set("key", $("key").value.trim());
+$("files").onchange = () => $("fileNames").textContent = [...$("files").files].map(f => f.name).join(", ");
+
+let course = JSON.parse(store.get("course") || "null");
+const save = () => store.set("course", JSON.stringify(course));
+
+const SYSTEM = `Tu es un professeur particulier bienveillant et rigoureux. Tu écris en français.
+Utilise le Markdown ; pour les maths, LaTeX entre $...$ ou $$...$$.`;
+
+const EX_SCHEMA = { type: "object", additionalProperties: false, required: ["enonce", "solution"],
+  properties: { enonce: { type: "string" }, solution: { type: "string" } } };
+const COURSE_SCHEMA = { type: "object", additionalProperties: false, required: ["titre", "blocs"],
+  properties: { titre: { type: "string" }, blocs: { type: "array", items: {
+    type: "object", additionalProperties: false, required: ["titre", "cours", "exercices"],
+    properties: { titre: { type: "string" }, cours: { type: "string" }, exercices: { type: "array", items: EX_SCHEMA } } } } } };
+const EXS_SCHEMA = { type: "object", additionalProperties: false, required: ["exercices"],
+  properties: { exercices: { type: "array", items: EX_SCHEMA } } };
+
+async function ask(content, schema) {
+  const key = store.get("key");
+  if (!key) throw new Error("Renseigne ta clé API d'abord.");
+  const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true }); // user's own key, local use only
+  const msg = await client.beta.messages.stream({
+    model: MODEL, max_tokens: 64000, system: SYSTEM,
+    thinking: { type: "adaptive" }, output_config: { effort: "high", ...(schema && { format: { type: "json_schema", schema } }) },
+    betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
+    messages: [{ role: "user", content }],
+  }).finalMessage();
+  if (msg.stop_reason === "refusal") throw new Error("Requête refusée par le modèle.");
+  if (msg.stop_reason === "max_tokens") throw new Error("Réponse tronquée (cours trop long ?). Essaie avec moins de fichiers.");
+  const text = msg.content.filter(b => b.type === "text").map(b => b.text).join("");
+  return schema ? JSON.parse(text) : text;
+}
+
+const b64 = (file) => new Promise((ok, ko) => { const r = new FileReader();
+  r.onload = () => ok(r.result.split(",")[1]); r.onerror = ko; r.readAsDataURL(file); });
+
+async function fileBlock(f) {
+  if (f.type === "application/pdf") return { type: "document", source: { type: "base64", media_type: f.type, data: await b64(f) } };
+  if (f.type.startsWith("image/")) return { type: "image", source: { type: "base64", media_type: f.type, data: await b64(f) } };
+  return { type: "text", text: `Fichier ${f.name} :\n${await f.text()}` };
+}
+
+async function busy(btn, label, fn) {
+  btn.disabled = true; $("status").style.display = "block"; $("status").textContent = label;
+  try { await fn(); } catch (e) { alert(e.message || e); }
+  finally { btn.disabled = false; $("status").style.display = "none"; }
+}
+
+$("go").onclick = (e) => busy(e.target, "Le prof lit ton cours et le restructure…", async () => {
+  const content = await Promise.all([...$("files").files].map(fileBlock));
+  if ($("paste").value.trim()) content.push({ type: "text", text: `Contenu collé (ex. NotebookLM) :\n${$("paste").value}` });
+  if (!content.length) throw new Error("Ajoute un fichier ou colle du texte.");
+  content.push({ type: "text", text: `Restructure ce cours en blocs progressifs (une notion par bloc).
+Pour chaque bloc : un cours clair et complet (définitions, méthode, exemple résolu), puis 3 exercices NOUVEAUX,
+différents de ceux présents dans le cours (que l'élève a peut-être déjà faits), de difficulté croissante, avec une solution détaillée.` });
+  course = await ask(content, COURSE_SCHEMA); save(); render();
+});
+
+const md = (s) => DOMPurify.sanitize(marked.parse(s || ""));
+function el(html) { const d = document.createElement("div"); d.innerHTML = html; return d; }
+
+function render() {
+  const root = $("course"); root.innerHTML = "";
+  if (!course) return;
+  root.append(el(`<h2>${DOMPurify.sanitize(course.titre)}</h2>`));
+  course.blocs.forEach((bloc, bi) => {
+    const d = document.createElement("details"); d.className = "bloc"; d.open = bi === 0;
+    d.innerHTML = `<summary>${bi + 1}. ${DOMPurify.sanitize(bloc.titre)}</summary><div class="cours">${md(bloc.cours)}</div>`;
+    const simplify = button("Je ne comprends pas : réexplique plus simplement", "ghost", (b) =>
+      busy(b, "Le prof réécrit le cours…", async () => {
+        bloc.cours = await ask([{ type: "text", text: `Réécris ce cours pour qu'il soit plus facile à comprendre :
+phrases simples, analogies, étapes pas à pas, un exemple supplémentaire commenté. Ne perds aucune notion.\n\n${bloc.cours}` }]);
+        save(); render(); }));
+    const more = button("Nouveaux exercices", "ghost", (b) =>
+      busy(b, "Le prof prépare de nouveaux exercices…", async () => {
+        const r = await ask([{ type: "text", text: `Cours :\n${bloc.cours}\n\nExercices déjà donnés (ne pas les répéter) :\n${bloc.exercices.map(x => x.enonce).join("\n---\n")}
+\nGénère 3 nouveaux exercices différents, difficulté croissante, avec solutions détaillées.` }], EXS_SCHEMA);
+        bloc.exercices.push(...r.exercices); save(); render(); }));
+    d.append(simplify, more);
+    bloc.exercices.forEach((ex, ei) => d.append(exercise(bloc, ex, ei)));
+    root.append(d);
+  });
+  renderMathInElement(root, { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }], throwOnError: false });
+}
+
+function button(label, cls, onclick) { const b = document.createElement("button"); b.textContent = label; b.className = cls; b.onclick = () => onclick(b); return b; }
+
+function exercise(bloc, ex, ei) {
+  const d = el(`<h4>Exercice ${ei + 1}</h4>${md(ex.enonce)}`); d.className = "ex";
+  const input = Object.assign(document.createElement("input"), { type: "file", accept: "image/*", capture: "environment", hidden: true });
+  const lbl = document.createElement("label"); lbl.className = "btn"; lbl.append("📷 Corriger ma copie (photo)", input);
+  input.onchange = () => input.files[0] && busy(lbl, "Le prof corrige ta copie…", async () => {
+    ex.correction = await ask([await fileBlock(input.files[0]), { type: "text", text:
+`Voici la photo de ma réponse à cet exercice.\n\nÉnoncé :\n${ex.enonce}\n\nSolution de référence :\n${ex.solution}\n\n
+Corrige ma copie comme un prof : retranscris ce que j'ai écrit, indique ce qui est juste, chaque erreur précise et pourquoi,
+donne une note sur 10, puis un conseil pour progresser. Si la photo est illisible, dis-le.` }]);
+    save(); render(); });
+  const sol = document.createElement("details"); sol.innerHTML = `<summary>Voir la solution</summary>${md(ex.solution)}`;
+  d.append(lbl, sol);
+  if (ex.correction) d.append(el(`<div class="corr"><b>Correction</b>${md(ex.correction)}</div>`));
+  return d;
+}
+
+render();
+</script>
+</body>
+</html>
