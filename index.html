@@ -40,6 +40,9 @@
   textarea { width:100%; min-height:110px; padding:10px; font:15px/1.5 var(--ui); color:var(--ink); background:var(--paper); border:1px solid var(--rule); border-radius:6px; }
   .mute { color:var(--mute); font:.9rem var(--ui); }
   .corr { background:var(--paper); border-left:3px solid var(--ok); padding:10px 14px; margin-top:12px; border-radius:0 6px 6px 0; }
+  .libitem { display:flex; flex-wrap:wrap; gap:8px; }
+  .libitem button[aria-current="true"] { background:var(--blue); color:var(--card); }
+  .pending { color:var(--mute); font-style:italic; }
   .tag { font:600 .75rem var(--ui); letter-spacing:.06em; text-transform:uppercase; color:var(--margin); }
   #status { position:sticky; top:env(safe-area-inset-top, 0px); z-index:5; font:600 1.1rem var(--ui); padding:14px 18px !important; background:var(--blue); color:var(--card); padding:8px 14px; border-radius:6px; }
   #status.err { background:var(--margin); }
@@ -70,6 +73,7 @@
     </details>
   </section>
 
+  <section class="sheet" id="lib" hidden></section>
   <div id="course"></div>
 </main>
 
@@ -87,8 +91,15 @@ const EXAMPLE = { exemple: true, titre: "Exemple : les dérivées", blocs: [{
   cours: "La **dérivée** mesure la vitesse de variation d'une fonction.\n\n**Règle :** si f(x) = xⁿ alors f′(x) = n·xⁿ⁻¹.\n\n*Exemple résolu :* f(x) = x⁴ → f′(x) = 4x³.",
   exercices: [{ enonce: "Dérive g(x) = x⁵.", solution: "g′(x) = 5x⁴" }, { enonce: "Dérive h(x) = 3x² + x.", solution: "h′(x) = 6x + 1" }] }] };
 
-let course = JSON.parse(store.get("course") || "null") || EXAMPLE;
-const save = () => store.set("course", JSON.stringify(course));
+// Library of saved courses (the old single-course key is migrated once).
+const old = JSON.parse(store.get("course") || "null");
+let courses = JSON.parse(store.get("courses") || "null") || (old && !old.exemple ? [old] : []);
+let current = Math.min(Number(store.get("current") ?? courses.length - 1), courses.length - 1);
+let course = courses[current] || EXAMPLE;
+const sources = new WeakMap(); // course -> {text, images} kept in memory to finish unfinished blocks
+function save() { if (!course.exemple) courses[current] = course;
+  store.set("courses", JSON.stringify(courses)); store.set("current", String(current)); }
+function open(i) { current = i; course = courses[i] || EXAMPLE; save(); render(); }
 
 const RULES = `Tu es un professeur particulier bienveillant et rigoureux. Tu écris en français, en Markdown.
 Pour les maths, écris en notation lisible sans LaTeX (x², √x, ≤, →, fractions a/b).`;
@@ -161,17 +172,36 @@ $("go").onclick = (e) => busy(e.target, "⏳ Le prof lit ton cours et prépare l
   const { text, images } = await readFiles(picked);
   const pasted = $("paste").value.trim();
   if (!text.trim() && !images.length && !pasted) throw { message: "Ajoute un fichier ou colle du texte." };
-  const r = await ask(`Voici le cours d'un élève${images.length ? " (une partie est dans les images jointes)" : ""}.
-${text}${pasted ? `\nContenu collé (ex. NotebookLM) :\n${pasted}` : ""}
+  const src = { images, text: `Voici le cours d'un élève${images.length ? " (une partie est dans les images jointes)" : ""}.
+${text}${pasted ? `\nContenu collé (ex. NotebookLM) :\n${pasted}` : ""}` };
+  const plan = await ask(`${src.text}
 
-Restructure ce cours en blocs progressifs (une notion par bloc). Pour chaque bloc : un cours clair et complet
-(définitions, méthode, exemple résolu), puis 3 exercices NOUVEAUX, différents de ceux présents dans le cours
-(l'élève les a peut-être déjà faits), de difficulté croissante, avec une solution détaillée.
-Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "cours": string, "exercices": [${EX_SHAPE}]}]}`,
-    { json: true, images, fresh: true });
-  if (!Array.isArray(r?.blocs)) throw { code: "invalid_json" };
-  course = r; save(); render(); $("course").scrollIntoView({ behavior: "smooth" });
+Découpe ce cours en blocs progressifs, une notion par bloc (2 à 8 blocs), dans l'ordre où il faut les apprendre.
+Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "notions": string}]}`, { json: true, images, fresh: true });
+  if (!Array.isArray(plan?.blocs) || !plan.blocs.length) throw { code: "invalid_json" };
+  course = { titre: String(plan.titre || "Mon cours"), blocs: plan.blocs.map(b => ({ titre: String(b.titre), notions: String(b.notions || ""), cours: "", exercices: [] })) };
+  sources.set(course, src); courses.push(course); current = courses.length - 1; save(); render();
+  $("course").scrollIntoView({ behavior: "smooth" });
+  for (const [i, bloc] of course.blocs.entries()) {
+    status(`⏳ Le prof écrit la leçon ${i + 1} sur ${course.blocs.length} : ${bloc.titre}…`);
+    await fillBloc(course, bloc);
+  }
 });
+
+// Writes one block's lesson and exercises from the original course material.
+async function fillBloc(c, bloc) {
+  const src = sources.get(c);
+  if (!src) throw { message: "Ajoute à nouveau ton cours pour terminer cette leçon." };
+  const r = await ask(`${src.text}
+
+Plan du cours : ${c.blocs.map(b => b.titre).join(" ; ")}.
+Écris le bloc « ${bloc.titre} » (notions : ${bloc.notions}) : un cours clair et complet (définitions, méthode,
+exemple résolu), puis 3 exercices NOUVEAUX, différents de ceux présents dans le cours (l'élève les a peut-être déjà faits),
+de difficulté croissante, avec une solution détaillée.
+Réponds uniquement en JSON : {"cours": string, "exercices": [${EX_SHAPE}]}`, { json: true, images: src.images, fresh: true });
+  if (typeof r?.cours !== "string" || !Array.isArray(r.exercices)) throw { code: "invalid_json" };
+  bloc.cours = r.cours; bloc.exercices = r.exercices; save(); render();
+}
 
 const md = (s) => DOMPurify.sanitize(marked.parse(String(s || "")));
 const txt = (s) => DOMPurify.sanitize(String(s || ""), { ALLOWED_TAGS: [] });
@@ -182,10 +212,26 @@ function render() {
   const head = document.createElement("div");
   head.innerHTML = `${course.exemple ? '<span class="tag">Exemple : ton cours apparaîtra ici</span>' : ""}<h2>2. ${txt(course.titre)}</h2>`;
   root.append(head);
-  if (!course.exemple) head.append(button("🗑 Nouveau cours (effacer celui-ci)", "ghost", () => { course = EXAMPLE; save(); render(); scrollTo({ top: 0 }); }));
+  renderLib();
+  if (!course.exemple) {
+    const row = document.createElement("div"); row.className = "row";
+    const del = button("🗑 Supprimer ce cours", "ghost", () => {
+      if (!del.dataset.sure) { del.dataset.sure = "1"; del.textContent = "Toucher encore pour confirmer la suppression"; return; }
+      courses.splice(current, 1); open(courses.length - 1);
+    });
+    row.append(button("➕ Ajouter un autre cours", "ghost", () => { open(-1); scrollTo({ top: 0 }); }), del);
+    head.append(row);
+  }
   course.blocs.forEach((bloc, bi) => {
     const d = document.createElement("details"); d.className = "bloc sheet"; d.open = bi === 0;
-    d.innerHTML = `<summary>${bi + 1}. ${txt(bloc.titre)}</summary><div class="cours">${md(bloc.cours)}</div>`;
+    d.innerHTML = `<summary>${bi + 1}. ${txt(bloc.titre)}</summary>`;
+    if (!bloc.cours) {
+      d.open = true;
+      const p = document.createElement("p"); p.className = "pending"; p.textContent = "Cette leçon n'est pas encore prête.";
+      d.append(p, button("Préparer cette leçon", "", (b) => busy(b, `⏳ Le prof écrit la leçon : ${bloc.titre}…`, () => fillBloc(course, bloc))));
+      root.append(d); return;
+    }
+    d.insertAdjacentHTML("beforeend", `<div class="cours">${md(bloc.cours)}</div>`);
     const row = document.createElement("div"); row.className = "row";
     row.append(
       button("🤔 Je ne comprends pas : explique plus simplement", "ghost", (b) => busy(b, "⏳ Le prof réexplique plus simplement…", async () => {
@@ -202,6 +248,13 @@ Réponds uniquement en JSON : {"exercices": [${EX_SHAPE}]}`, { json: true, fresh
     bloc.exercices.forEach((ex, ei) => d.append(exercise(ex, ei)));
     root.append(d);
   });
+}
+
+function renderLib() {
+  const lib = $("lib"); lib.hidden = !courses.length; lib.innerHTML = "<h2>Mes cours</h2>";
+  const row = document.createElement("div"); row.className = "libitem";
+  courses.forEach((c, i) => { const b = button(c.titre, "ghost", () => open(i)); b.setAttribute("aria-current", String(i === current)); row.append(b); });
+  lib.append(row);
 }
 
 function exercise(ex, ei) {
