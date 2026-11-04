@@ -18,6 +18,7 @@ const sse = (text) => [
     let out;
     if (last.startsWith('Restructure')) out = JSON.stringify({titre:'Dérivées', blocs:[{titre:'Définition', cours:'Cours initial', exercices:[{enonce:'Dériver $x^3$', solution:'$3x^2$'}]}]});
     else if (last.startsWith('Réécris')) out = 'Cours SIMPLIFIÉ';
+    else if (last.includes('ne pas les répéter')) out = JSON.stringify({exercices:[{enonce:'Nouvel exo inédit', solution:'s'}]});
     else out = 'Note : 8/10 — bonne copie';
     await r.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(out) });
   });
@@ -27,8 +28,10 @@ const sse = (text) => [
   await p.click('#go'); await p.waitForSelector('details.bloc');
   await p.click('text=réexplique plus simplement'); await p.waitForSelector('text=Cours SIMPLIFIÉ');
   await p.setInputFiles('.ex input[type=file]', path.join(D,'copie.png')); await p.waitForSelector('.corr');
+  await p.click('text=Nouveaux exercices'); await p.waitForSelector('text=Nouvel exo inédit');
+  const r4 = reqs[3].body; assert.equal(r4.output_config.format.type, 'json_schema'); assert.ok(r4.messages[0].content[0].text.includes('Dériver $x^3$'));
   const [r1, r2, r3] = reqs.map(x => x.body);
-  assert.equal(reqs.length, 3); assert.equal(r1.model, 'claude-opus-5-5');
+  assert.equal(reqs.length, 4); assert.equal(r1.model, 'claude-opus-5-5');
   assert.equal(r1.messages[0].content[0].type, 'document'); assert.equal(r1.output_config.format.type, 'json_schema');
   assert.ok(r1.messages[0].content.some(c => c.text?.includes('NotebookLM')));
   assert.ok(!r2.output_config.format); assert.equal(r3.messages[0].content[0].type, 'image');
@@ -36,6 +39,6 @@ const sse = (text) => [
   assert.ok(reqs[0].headers['anthropic-beta'].includes('server-side-fallback'));
   assert.ok((await p.textContent('.corr')).includes('8/10'));
   assert.deepEqual(errs, []);
-  console.log('E2E OK: restructure, simplify, photo correction; requests valid');
+  console.log('E2E OK: restructure, simplify, photo correction, new exercises; requests valid');
   await b.close();
 })().catch(e => { console.error('FAIL', e); process.exit(1); });
