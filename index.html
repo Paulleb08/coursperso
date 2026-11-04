@@ -33,7 +33,9 @@
   <section>
     <h2>1. Clé API Claude</h2>
     <input id="key" type="password" placeholder="sk-ant-..." autocomplete="off">
-    <p class="mute">Stockée uniquement dans ce navigateur (localStorage), envoyée seulement à api.anthropic.com.</p>
+    <p class="mute">Crée-la sur <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com → API Keys</a>, colle-la ici une seule fois.
+    Stockée uniquement dans ce navigateur (localStorage), envoyée seulement à api.anthropic.com.</p>
+    <p id="keyState" class="mute"></p>
   </section>
 
   <section>
@@ -60,7 +62,9 @@ const store = { get: (k) => { try { return localStorage.getItem(k); } catch { re
                 set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
 $("key").value = store.get("key") || "";
-$("key").onchange = () => store.set("key", $("key").value.trim());
+const showKey = () => $("keyState").textContent = store.get("key") ? "✅ Clé enregistrée." : "⚠️ Aucune clé : ajoute-la pour utiliser le prof.";
+$("key").onchange = () => { store.set("key", $("key").value.trim()); showKey(); };
+showKey();
 $("files").onchange = () => $("fileNames").textContent = [...$("files").files].map(f => f.name).join(", ");
 
 let course = JSON.parse(store.get("course") || "null");
