@@ -103,6 +103,7 @@ function open(i) { current = i; course = courses[i] || EXAMPLE; save(); render()
 
 const RULES = `Tu es un professeur particulier bienveillant et rigoureux. Tu écris en français, en Markdown.
 Pour les maths, écris en notation lisible sans LaTeX (x², √x, ≤, →, fractions a/b).`;
+const MAX_IMAGES = 20; // read in batches of the platform's per-call limit, then transcribed to text
 const EX_SHAPE = `{"enonce": string, "solution": string}`;
 
 let sample = null, imgMax = 0;
@@ -132,7 +133,7 @@ async function pdfToParts(file) {
   for (let i = 1; i <= pdf.numPages; i++) text += (await (await pdf.getPage(i)).getTextContent()).items.map(t => t.str).join(" ") + "\n";
   if (text.trim().length > 50) return { text: `PDF ${file.name} :\n${text}`, images: [] };
   const images = []; // scanned PDF: send pages as images
-  for (let i = 1; i <= Math.min(pdf.numPages, imgMax); i++) {
+  for (let i = 1; i <= Math.min(pdf.numPages, MAX_IMAGES); i++) {
     const page = await pdf.getPage(i), vp = page.getViewport({ scale: 1.5 });
     const c = Object.assign(document.createElement("canvas"), { width: vp.width, height: vp.height });
     await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
@@ -148,7 +149,7 @@ async function readFiles(files) {
     else if (f.type.startsWith("image/")) images.push(f);
     else text += `Fichier ${f.name} :\n${await f.text()}\n`;
   }
-  if (images.length > imgMax) throw { code: "x", message: `Trop d'images : ${imgMax} maximum par envoi.` };
+  if (images.length > MAX_IMAGES) throw { message: `Trop d'images : ${MAX_IMAGES} au maximum (photos et pages scannées).` };
   return { text, images };
 }
 
@@ -172,14 +173,23 @@ $("go").onclick = (e) => busy(e.target, "⏳ Le prof lit ton cours et prépare l
   const { text, images } = await readFiles(picked);
   const pasted = $("paste").value.trim();
   if (!text.trim() && !images.length && !pasted) throw { message: "Ajoute un fichier ou colle du texte." };
-  const src = { images, text: `Voici le cours d'un élève${images.length ? " (une partie est dans les images jointes)" : ""}.
-${text}${pasted ? `\nContenu collé (ex. NotebookLM) :\n${pasted}` : ""}` };
+  let scans = "";
+  if (images.length && !imgMax) throw { code: "images_unavailable" };
+  for (let i = 0; i < images.length; i += imgMax) {
+    const part = images.slice(i, i + imgMax);
+    status(`⏳ Le prof lit tes photos ${i + 1} à ${i + part.length} sur ${images.length}…`);
+    scans += `\n[Pages ${i + 1} à ${i + part.length}]\n` + await ask(`Les images jointes sont des pages d'un cours (pages ${i + 1} à ${i + part.length}).
+Retranscris fidèlement tout leur contenu en Markdown : texte, formules, tableaux, exercices. Décris brièvement les schémas.
+Réponds avec la retranscription seule.`, { images: part, fresh: true });
+  }
+  const src = { images: [], text: `Voici le cours d'un élève.\n${text}${scans}${pasted ? `\nContenu collé (ex. NotebookLM) :\n${pasted}` : ""}` };
+  status("⏳ Le prof prépare le plan du cours…");
   const plan = await ask(`${src.text}
 
 Découpe ce cours en blocs progressifs, une notion par bloc (2 à 8 blocs), dans l'ordre où il faut les apprendre.
-Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "notions": string}]}`, { json: true, images, fresh: true });
+Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "notions": string}]}`, { json: true, fresh: true });
   if (!Array.isArray(plan?.blocs) || !plan.blocs.length) throw { code: "invalid_json" };
-  course = { titre: String(plan.titre || "Mon cours"), blocs: plan.blocs.map(b => ({ titre: String(b.titre), notions: String(b.notions || ""), cours: "", exercices: [] })) };
+  course = { titre: String(plan.titre || "Mon cours"), source: src.text, blocs: plan.blocs.map(b => ({ titre: String(b.titre), notions: String(b.notions || ""), cours: "", exercices: [] })) };
   sources.set(course, src); courses.push(course); current = courses.length - 1; save(); render();
   $("course").scrollIntoView({ behavior: "smooth" });
   for (const [i, bloc] of course.blocs.entries()) {
@@ -190,7 +200,7 @@ Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "not
 
 // Writes one block's lesson and exercises from the original course material.
 async function fillBloc(c, bloc) {
-  const src = sources.get(c);
+  const src = sources.get(c) || (c.source && { text: c.source, images: [] });
   if (!src) throw { message: "Ajoute à nouveau ton cours pour terminer cette leçon." };
   const r = await ask(`${src.text}
 
@@ -222,6 +232,7 @@ function render() {
     row.append(button("➕ Ajouter un autre cours", "ghost", () => { open(-1); scrollTo({ top: 0 }); }), del);
     head.append(row);
   }
+  if (course.source) root.append(askBox(course));
   course.blocs.forEach((bloc, bi) => {
     const d = document.createElement("details"); d.className = "bloc sheet"; d.open = bi === 0;
     d.innerHTML = `<summary>${bi + 1}. ${txt(bloc.titre)}</summary>`;
@@ -248,6 +259,24 @@ Réponds uniquement en JSON : {"exercices": [${EX_SHAPE}]}`, { json: true, fresh
     bloc.exercices.forEach((ex, ei) => d.append(exercise(ex, ei)));
     root.append(d);
   });
+}
+
+// NotebookLM-style questions, answered only from the course's own material.
+function askBox(c) {
+  const box = document.createElement("section"); box.className = "sheet";
+  box.innerHTML = `<h2>❓ Pose une question sur ce cours</h2>
+    <p><label for="q" class="mute">Par exemple : « Résume-moi le chapitre 2 » ou « Quelle est la différence entre… ? »</label>
+    <textarea id="q" placeholder="Écris ta question ici…"></textarea></p>`;
+  const out = document.createElement("div"); out.className = "cours";
+  box.append(button("Demander au prof", "", (b) => {
+    const q = box.querySelector("#q").value.trim(); if (!q) return;
+    busy(b, "⏳ Le prof cherche la réponse dans ton cours…", async () => {
+      out.innerHTML = md(await ask(`${c.source}\n\nQuestion de l'élève : ${q}
+Réponds uniquement à partir du cours ci-dessus, simplement et clairement. Indique de quelle partie du cours vient la réponse.
+Si la réponse n'est pas dans le cours, dis-le, puis donne une brève réponse générale en le signalant.`, { fresh: true }));
+    });
+  }), out);
+  return box;
 }
 
 function renderLib() {
