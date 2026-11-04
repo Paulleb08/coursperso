@@ -12,3 +12,4 @@ NotebookLM n'a pas d'API publique : exporte/copie tes notes ou ton guide d'étud
 Tout est stocké en local dans le navigateur (localStorage).
 
 Test (sans clé API, API simulée) : `node tests/e2e.js` (nécessite Playwright).
+- Tuto pour la clé API : voir `TUTO.md`.
