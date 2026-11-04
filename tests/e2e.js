@@ -25,10 +25,10 @@ fs.writeFileSync(path.join(D, 'copie.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]
   await p.goto('file://' + path.join(__dirname, '..', 'index.html'));
   await p.waitForSelector('text=Exemple');                       // example course at rest
   await p.waitForTimeout(300);
-  await p.setInputFiles('#files', path.join(D, 'cours.txt')); await p.fill('#paste', 'Notes NotebookLM');
-  await p.click('#go'); await p.waitForSelector('summary:has-text("Puissances")');
-  await p.click('text=réexplique'); await p.waitForSelector('text=Cours SIMPLIFIÉ');
-  await p.click('text=Nouveaux exercices'); await p.waitForSelector('text=Nouvel exo inédit');
+  await p.click('text=Ou colle du texte'); await p.fill('#paste', 'Notes NotebookLM');
+  await p.setInputFiles('#files', path.join(D, 'cours.txt'));     // picking a file starts on its own await p.waitForSelector('summary:has-text("Puissances")');
+  await p.click('text=explique plus simplement'); await p.waitForSelector('text=Cours SIMPLIFIÉ');
+  await p.click("text=D'autres exercices"); await p.waitForSelector('text=Nouvel exo inédit');
   await p.setInputFiles('.ex input[type=file]', path.join(D, 'copie.png')); await p.waitForSelector('.corr');
   const calls = await p.evaluate(() => window.__calls);
   assert.equal(calls.length, 4);
@@ -37,6 +37,7 @@ fs.writeFileSync(path.join(D, 'copie.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]
   assert.equal(calls[3].o.images, 1); assert.ok(calls[3].prompt.includes('3x²'));
   assert.ok((await p.textContent('.corr')).includes('8/10'));
   assert.equal(await p.isHidden('#status'), true);
+  await p.click('text=Nouveau cours'); await p.waitForSelector('text=ton cours apparaîtra ici');
   assert.deepEqual(errs, []);
   console.log('E2E OK: restructure, simplify, new exercises, photo correction via window.claude sample');
   await b.close();
