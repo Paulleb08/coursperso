@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <style>
-  /* Layout: one school-notebook column, Seyès-ruled paper with a red margin line; blocks are chapters. */
+  /* Layout: school notebook. Desktop = course list sidebar + page; phone = one view at a time with a bottom tab bar. */
   :root {
     --paper:#fbfbf6; --card:#ffffff; --ink:#1f2433; --mute:#5d6475; --blue:#2b44a8; --margin:#d1464c; --rule:#dfe3f0; --ok:#1f7a4d;
     --display:"Bricolage Grotesque", system-ui, sans-serif; --body:"Source Serif 4", Georgia, serif; --ui:system-ui, sans-serif;
@@ -12,70 +12,94 @@
   :root[data-theme="dark"] {
     --paper:#14171d; --card:#1c2029; --ink:#e7e9f0; --mute:#9aa1b2; --blue:#8ea2ff; --margin:#ff7a7f; --rule:#2a3040; --ok:#5fd39a; color-scheme:dark }
   * { box-sizing:border-box; }
-  body { background:var(--paper); color:var(--ink); font:19px/1.65 var(--body);
-    padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:24px 64px; }
-  main { max-width:760px; margin:0 auto; display:grid; gap:20px; }
+  body { background:var(--paper); color:var(--ink); font:18px/1.6 var(--body);
+    padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:16px 96px; }
   h1, h2, h3, summary { font-family:var(--display); text-wrap:balance; line-height:1.2; }
-  h1 { font-size:2.2rem; font-weight:800; margin:0; color:var(--blue); }
-  h1 small { display:block; font:400 1rem var(--body); color:var(--mute); margin-top:4px; }
-  .sheet { background:var(--card); border:1px solid var(--rule); border-radius:6px; padding:20px 20px 20px 36px; position:relative; min-width:0; }
+  h2 { font-size:1.35rem; margin:0 0 10px; }
+
+  .top { max-width:1180px; margin:0 auto 16px; display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; }
+  .top h1 { margin:0; font-size:1.8rem; font-weight:800; color:var(--blue); margin-right:auto; }
+  .subject { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font:600 1rem var(--ui); }
+  select, input[type=text], input[type=search], textarea { font:16px/1.4 var(--ui); color:var(--ink); background:var(--card); border:1.5px solid var(--rule); border-radius:8px; padding:10px 12px; min-height:46px; }
+  textarea { width:100%; min-height:110px; }
+
+  .app { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:280px minmax(0,1fr); gap:20px; align-items:start; }
+  aside { position:sticky; top:16px; display:grid; gap:8px; }
+  aside h2 { font-size:1rem; font-family:var(--ui); text-transform:uppercase; letter-spacing:.06em; color:var(--mute); margin:6px 0 0; }
+  .navbtn { text-align:left; width:100%; justify-content:flex-start; background:transparent; color:var(--ink); box-shadow:inset 0 0 0 1.5px var(--rule); font-weight:500; }
+  .navbtn[aria-current="true"] { background:var(--blue); color:var(--card); box-shadow:none; font-weight:700; }
+  main { display:grid; gap:18px; min-width:0; }
+
+  .sheet { background:var(--card); border:1px solid var(--rule); border-radius:8px; padding:20px 20px 20px 36px; position:relative; min-width:0; }
   .sheet::before { content:""; position:absolute; left:20px; top:0; bottom:0; width:2px; background:var(--margin); opacity:.55; }
-  .sheet h2 { margin:0 0 8px; font-size:1.3rem; }
-  details.bloc > summary { font-size:1.25rem; font-weight:600; cursor:pointer; color:var(--blue); }
+  details.bloc > summary { font-size:1.2rem; font-weight:600; cursor:pointer; color:var(--blue); }
   .cours { min-width:0; overflow-wrap:anywhere; }
   .cours pre, .cours table { overflow-x:auto; display:block; }
   .ex { border-top:1px dashed var(--rule); padding-top:14px; margin-top:16px; }
-  .ex h3 { margin:0; font-size:1rem; font-family:var(--ui); text-transform:uppercase; letter-spacing:.06em; color:var(--margin); }
-  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-  button, label.btn { font:600 1.05rem var(--ui); background:var(--blue); color:var(--card); border:0; border-radius:8px; padding:12px 18px; min-height:48px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
-  .drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; width:100%; min-height:150px; border:3px dashed var(--blue); border-radius:12px; background:var(--paper); color:var(--blue); font:700 1.3rem var(--ui); cursor:pointer; padding:16px; }
+  .ex h3 { margin:0; font:700 .9rem var(--ui); text-transform:uppercase; letter-spacing:.06em; color:var(--margin); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; align-items:center; }
+  button, label.btn { font:600 1rem var(--ui); background:var(--blue); color:var(--card); border:0; border-radius:8px; padding:11px 16px; min-height:46px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
+  button.ghost { background:transparent; color:var(--blue); box-shadow:inset 0 0 0 1.5px var(--blue); }
+  button.danger { background:transparent; color:var(--margin); box-shadow:inset 0 0 0 1.5px var(--margin); }
+  button.big { font-size:1.15rem; padding:14px 22px; }
+  button:disabled { opacity:.5; cursor:wait; }
+  :is(button, select, input, textarea, summary):focus-visible, label.btn:focus-within { outline:3px solid var(--margin); outline-offset:2px; }
+  .drop { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; width:100%; min-height:140px; border:3px dashed var(--blue); border-radius:12px; background:var(--paper); color:var(--blue); font:700 1.25rem var(--ui); cursor:pointer; padding:16px; }
   .drop span { font:400 1rem var(--ui); color:var(--mute); }
   .drop.over { background:var(--rule); }
-  ol.steps { margin:12px 0 0; padding-left:1.4em; font:1.05rem/1.5 var(--ui); display:grid; gap:4px; }
-  ol.steps b { color:var(--blue); }
-  details.more summary { cursor:pointer; font:600 1rem var(--ui); color:var(--blue); margin-top:14px; }
-  button.ghost { background:transparent; color:var(--blue); box-shadow:inset 0 0 0 1.5px var(--blue); }
-  button:disabled, label.btn[aria-disabled="true"] { opacity:.5; cursor:wait; }
-  button:focus-visible, label.btn:focus-within, textarea:focus-visible { outline:3px solid var(--margin); outline-offset:2px; }
-  textarea { width:100%; min-height:110px; padding:10px; font:15px/1.5 var(--ui); color:var(--ink); background:var(--paper); border:1px solid var(--rule); border-radius:6px; }
-  .mute { color:var(--mute); font:.9rem var(--ui); }
-  .corr { background:var(--paper); border-left:3px solid var(--ok); padding:10px 14px; margin-top:12px; border-radius:0 6px 6px 0; }
-  .libitem { display:flex; flex-wrap:wrap; gap:8px; }
-  .libitem button[aria-current="true"] { background:var(--blue); color:var(--card); }
+  .mute { color:var(--mute); font:.95rem var(--ui); }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; list-style:none; padding:0; margin:10px 0 0; }
+  .chips li { font:.9rem var(--ui); background:var(--paper); border:1px solid var(--rule); border-radius:999px; padding:4px 8px 4px 12px; display:flex; align-items:center; gap:6px; }
+  .chips button { min-height:28px; padding:2px 8px; background:transparent; color:var(--margin); }
+  .pick { display:grid; gap:6px; margin:10px 0 0; padding:0; list-style:none; }
+  .pick label { display:flex; gap:10px; align-items:center; font:1rem var(--ui); padding:8px 10px; border:1px solid var(--rule); border-radius:8px; cursor:pointer; }
+  .pick input { width:22px; height:22px; flex:none; }
+  .answer { background:var(--paper); border-radius:8px; padding:10px 14px; margin-top:10px; }
+  .corr { background:var(--paper); border-left:3px solid var(--ok); padding:10px 14px; margin-top:12px; border-radius:0 8px 8px 0; }
   .pending { color:var(--mute); font-style:italic; }
-  .tag { font:600 .75rem var(--ui); letter-spacing:.06em; text-transform:uppercase; color:var(--margin); }
-  #status { position:sticky; top:env(safe-area-inset-top, 0px); z-index:5; font:600 1.1rem var(--ui); padding:14px 18px !important; background:var(--blue); color:var(--card); padding:8px 14px; border-radius:6px; }
+  .empty { text-align:center; padding:28px 16px; }
+  #status { position:sticky; top:env(safe-area-inset-top, 0px); z-index:5; font:600 1.05rem var(--ui); background:var(--blue); color:var(--card); padding:12px 16px; border-radius:8px; max-width:1180px; margin:0 auto 12px; }
   #status.err { background:var(--margin); }
-  @media (prefers-reduced-motion: no-preference) { details.bloc[open] .cours { animation:fade .25s ease-out; } }
-  @keyframes fade { from { opacity:.4 } to { opacity:1 } }
+  .back { display:none; }
+  .tabs { display:none; }
+
+  @media (max-width: 760px) {
+    body { font-size:17px; padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px)); }
+    .top h1 { font-size:1.5rem; }
+    .app { grid-template-columns:minmax(0,1fr); }
+    aside { position:static; }
+    body:not([data-view="list"]) aside { display:none; }
+    body[data-view="list"] main { display:none; }
+    .back { display:inline-flex; }
+    .sheet { padding:16px 14px 16px 28px; }
+    .sheet::before { left:14px; }
+    .tabs { display:grid; grid-template-columns:repeat(3, 1fr); position:fixed; left:0; right:0; bottom:0; z-index:10;
+      background:var(--card); border-top:1px solid var(--rule);
+      padding:6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+    .tabs button { flex-direction:column; gap:2px; background:transparent; color:var(--mute); font-size:.85rem; min-height:56px; }
+    .tabs button span { font-size:1.4rem; line-height:1; }
+    .tabs button[aria-current="true"] { color:var(--blue); }
+  }
 </style>
 
-<main>
-  <header>
-    <h1>Prof Perso<small>Ton professeur particulier. Gratuit avec ton compte Claude, rien à installer.</small></h1>
-    <ol class="steps">
-      <li><b>Ajoute ton cours</b> : une photo, un PDF ou un fichier.</li>
-      <li><b>Lis les leçons</b> et fais les exercices sur une feuille.</li>
-      <li><b>Prends ta feuille en photo</b> : le prof te corrige et te donne une note.</li>
-    </ol>
-  </header>
-  <div id="status" role="status" hidden></div>
-
-  <section class="sheet">
-    <h2>1. Ajoute ton cours</h2>
-    <label class="drop" id="drop" for="files">📄 Ajouter mon cours<span>Touche ici pour choisir une photo ou un PDF, ou glisse le fichier ici.</span>
-      <input id="files" type="file" multiple accept=".pdf,image/*,.txt,.md" hidden></label>
-    <p id="fileNames" class="mute"></p>
-    <details class="more"><summary>Ou colle du texte (par exemple depuis NotebookLM)</summary>
-      <p><label for="paste" class="mute">Copie ton guide d'étude ou tes notes NotebookLM, puis colle-les ici.</label>
-      <textarea id="paste" placeholder="Colle ton texte ici…"></textarea></p>
-      <button id="go">Préparer mon cours</button>
-    </details>
-  </section>
-
-  <section class="sheet" id="lib" hidden></section>
-  <div id="course"></div>
-</main>
+<header class="top">
+  <h1>Prof Perso</h1>
+  <div class="subject">
+    <label for="matiere">Matière</label>
+    <select id="matiere"></select>
+    <button class="ghost" id="newSubject">＋ Nouvelle matière</button>
+  </div>
+</header>
+<div id="status" role="status" hidden></div>
+<div class="app">
+  <aside id="aside"></aside>
+  <main id="main"></main>
+</div>
+<nav class="tabs" aria-label="Navigation">
+  <button data-tab="list"><span>📚</span>Cours</button>
+  <button data-tab="add"><span>➕</span>Ajouter</button>
+  <button data-tab="fiches"><span>📝</span>Fiches</button>
+</nav>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
@@ -83,49 +107,120 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
-                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+                set: (k, v) => { try { localStorage.setItem(k, v); return true; } catch { return false; } } };
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const uid = () => Math.random().toString(36).slice(2, 10);
+const DRIVE = "Google Drive";
+const MAX_IMAGES = 20; // read in batches of the platform's per-call limit, then transcribed to text
 
-const EXAMPLE = { exemple: true, titre: "Exemple : les dérivées", blocs: [{
-  titre: "Dérivée d'une puissance",
-  cours: "La **dérivée** mesure la vitesse de variation d'une fonction.\n\n**Règle :** si f(x) = xⁿ alors f′(x) = n·xⁿ⁻¹.\n\n*Exemple résolu :* f(x) = x⁴ → f′(x) = 4x³.",
-  exercices: [{ enonce: "Dérive g(x) = x⁵.", solution: "g′(x) = 5x⁴" }, { enonce: "Dérive h(x) = 3x² + x.", solution: "h′(x) = 6x + 1" }] }] };
+// ---------- data ----------
+// {matieres: [{id, nom, cours: [course], fiches: [{id, titre, contenu}]}], m, c}
+function load() {
+  const d = JSON.parse(store.get("prof") || "null");
+  if (d?.matieres?.length) return d;
+  const old = JSON.parse(store.get("courses") || "null") || [JSON.parse(store.get("course") || "null")].filter(x => x && !x.exemple);
+  return { matieres: [{ id: uid(), nom: "Mes cours", cours: old.map(c => ({ id: uid(), ...c })), fiches: [] }], m: 0, c: old.length ? 0 : -1 };
+}
+const data = load();
+const mat = () => data.matieres[data.m];
+const course = () => mat().cours[data.c];
+function save() { if (!store.set("prof", JSON.stringify(data))) status("Mémoire du navigateur pleine : supprime un ancien cours pour continuer à enregistrer.", true); }
 
-// Library of saved courses (the old single-course key is migrated once).
-const old = JSON.parse(store.get("course") || "null");
-let courses = JSON.parse(store.get("courses") || "null") || (old && !old.exemple ? [old] : []);
-let current = Math.min(Number(store.get("current") ?? courses.length - 1), courses.length - 1);
-let course = courses[current] || EXAMPLE;
-const sources = new WeakMap(); // course -> {text, images} kept in memory to finish unfinished blocks
-function save() { if (!course.exemple) courses[current] = course;
-  store.set("courses", JSON.stringify(courses)); store.set("current", String(current)); }
-function open(i) { current = i; course = courses[i] || EXAMPLE; save(); render(); }
+let view = course() ? "course" : "add";
+const narrow = () => matchMedia("(max-width: 760px)").matches;
 
+// ---------- Claude ----------
 const RULES = `Tu es un professeur particulier bienveillant et rigoureux. Tu écris en français, en Markdown.
 Pour les maths, écris en notation lisible sans LaTeX (x², √x, ≤, →, fractions a/b).`;
-const MAX_IMAGES = 20; // read in batches of the platform's per-call limit, then transcribed to text
 const EX_SHAPE = `{"enonce": string, "solution": string}`;
-
-let sample = null, imgMax = 0;
+let sample = null, mcp = null, imgMax = 0;
 (async () => {
-  sample = window.claude ? await claude.use("sample") : null;
+  [sample, mcp] = window.claude ? await Promise.all([claude.use("sample"), claude.use("mcp")]) : [null, null];
   if (sample) imgMax = (await sample.limits().catch(() => null))?.images?.maxCount || 0;
   if (!sample) status("Cette page doit être ouverte depuis claude.ai, connecté à ton compte Claude.", true);
+  render();
 })();
 
 const ERRORS = { not_granted: "Tu n'as pas autorisé la page à utiliser Claude. Recharge la page pour qu'elle te le redemande.",
   rate_limited: "Limite d'utilisation de Claude atteinte. Réessaie un peu plus tard.", refused: "Claude a refusé cette demande.",
-  invalid_json: "Réponse illisible. Réessaie.", prompt_too_large: "Cours trop long : envoie-le en plusieurs morceaux.",
+  invalid_json: "Réponse illisible. Réessaie.", prompt_too_large: "Trop de texte d'un coup : choisis moins de cours ou de documents.",
   image_rejected: "Image refusée : essaie une autre photo (JPEG ou PNG).", images_unavailable: "Envoi de photos impossible dans cette vue.",
-  sampling_disabled: "Claude n'est pas disponible pour ce compte.", session_expired: "Reconnecte-toi à Claude." };
+  sampling_disabled: "Claude n'est pas disponible pour ce compte.", session_expired: "Reconnecte-toi à Claude.",
+  server_not_connected: "Google Drive n'est pas connecté : dans claude.ai, va dans Paramètres → Connecteurs et ajoute Google Drive.",
+  needs_reauth: "Reconnecte Google Drive dans claude.ai → Paramètres → Connecteurs.",
+  not_in_manifest: "Tu as refusé l'accès à Google Drive pour cette page.", approval_required: "Autorise l'accès à Google Drive pour continuer.",
+  server_unavailable: "Google Drive ne répond pas. Réessaie dans un instant." };
 
 function status(msg, err) { const s = $("status"); s.hidden = !msg; s.textContent = msg || ""; s.className = err ? "err" : ""; }
 
-async function ask(prompt, { json, images, fresh } = {}) {
-  if (!sample) throw { code: "unavailable", message: "Ouvre cette page dans Claude (claude.ai)." };
-  const opts = { cache: fresh ? false : undefined, ...(images?.length && { images }) };
+async function ask(prompt, { json, images } = {}) {
+  if (!sample) throw { message: "Ouvre cette page dans Claude (claude.ai)." };
+  const opts = { cache: false, ...(images?.length && { images }) };
   return json ? sample.json(RULES + "\n\n" + prompt, opts) : (await sample(RULES + "\n\n" + prompt, opts)).text;
 }
+
+async function busy(btn, label, fn) {
+  if (btn) btn.disabled = true; status(label);
+  try { await fn(); status(""); }
+  catch (e) { status(ERRORS[e?.code] || e?.message || "Erreur inattendue. Réessaie.", true); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+// ---------- small DOM helpers ----------
+const md = (s) => DOMPurify.sanitize(marked.parse(String(s || "")));
+const txt = (s) => DOMPurify.sanitize(String(s || ""), { ALLOWED_TAGS: [] });
+function el(tag, attrs = {}, ...kids) { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) k.startsWith("on") ? e[k] = v : e.setAttribute(k, v); e.append(...kids); return e; }
+function button(label, cls, onclick) { return el("button", { class: cls, onclick: function () { onclick(this); } }, label); }
+function html(tag, cls, markup) { const e = el(tag, { class: cls }); e.innerHTML = markup; return e; }
+// A destructive or spoiler action needs a second, deliberate tap.
+function twoTap(label, confirmLabel, cls, action) {
+  return button(label, cls, (b) => { if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = confirmLabel; return; } action(b); });
+}
+
+// ---------- navigation ----------
+function go(v, c) { if (c !== undefined) data.c = c; view = v; save(); render(); scrollTo({ top: 0 }); }
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => go(b.dataset.tab));
+$("matiere").onchange = () => { data.m = Number($("matiere").value); data.c = mat().cours.length ? 0 : -1; go(narrow() ? "list" : (course() ? "course" : "add")); };
+$("newSubject").onclick = () => {
+  const main = $("main"); main.innerHTML = ""; view = "newSubject";
+  const input = el("input", { type: "text", id: "subjectName", placeholder: "Ex. : Mathématiques" });
+  const create = () => { const nom = input.value.trim(); if (!nom) return;
+    data.matieres.push({ id: uid(), nom, cours: [], fiches: [] }); data.m = data.matieres.length - 1; data.c = -1; go("add"); };
+  input.onkeydown = (e) => e.key === "Enter" && create();
+  main.append(el("section", { class: "sheet" }, el("h2", {}, "Nouvelle matière"),
+    el("p", {}, el("label", { for: "subjectName", class: "mute" }, "Nom de la matière"), el("br"), input),
+    el("div", { class: "row" }, button("Créer la matière", "big", create), button("Annuler", "ghost", () => go(course() ? "course" : "add")))));
+  document.body.dataset.view = "newSubject"; input.focus();
+};
+
+function render() {
+  document.body.dataset.view = view;
+  const sel = $("matiere"); sel.innerHTML = "";
+  data.matieres.forEach((m, i) => sel.append(el("option", { value: i }, `${m.nom} (${m.cours.length})`)));
+  sel.value = data.m;
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-current", String(b.dataset.tab === view || (view === "course" && b.dataset.tab === "list"))));
+  renderAside();
+  const main = $("main"); main.innerHTML = "";
+  if (view === "add") main.append(...addView());
+  else if (view === "fiches") main.append(...fichesView());
+  else if (course()) main.append(...courseView(course()));
+  else main.append(...addView());
+}
+
+function renderAside() {
+  const a = $("aside"); a.innerHTML = "";
+  a.append(el("h2", {}, `Cours de ${mat().nom}`));
+  if (!mat().cours.length) a.append(el("p", { class: "mute" }, "Aucun cours pour l'instant."));
+  mat().cours.forEach((c, i) => a.append(el("button", { class: "navbtn", "aria-current": String(view === "course" && i === data.c), onclick: () => go("course", i) }, `📘 ${c.titre}`)));
+  a.append(el("h2", {}, "Outils"),
+    el("button", { class: "navbtn", "aria-current": String(view === "add"), onclick: () => go("add") }, "➕ Ajouter un cours"),
+    el("button", { class: "navbtn", "aria-current": String(view === "fiches"), onclick: () => go("fiches") }, "📝 Fiches de révision"));
+  if (data.matieres.length > 1) a.append(twoTap(`🗑 Supprimer la matière « ${mat().nom} »`, "Toucher encore : supprime aussi ses cours et fiches", "danger", () => {
+    data.matieres.splice(data.m, 1); data.m = 0; data.c = mat().cours.length ? 0 : -1; go(narrow() ? "list" : "add"); }));
+}
+
+// ---------- add a course ----------
+const pending = { files: [], drive: [] }; // sources waiting to become a course
 
 async function pdfToParts(file) {
   const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
@@ -153,161 +248,211 @@ async function readFiles(files) {
   return { text, images };
 }
 
-async function busy(btn, label, fn) {
-  btn.disabled = true; btn.setAttribute("aria-disabled", "true"); status(label);
-  try { await fn(); status(""); }
-  catch (e) { status(ERRORS[e?.code] || e?.message || "Erreur inattendue. Réessaie.", true); }
-  finally { btn.disabled = false; btn.removeAttribute("aria-disabled"); }
+function addView() {
+  const list = el("ul", { class: "chips", "aria-label": "Sources ajoutées" });
+  const refreshList = () => {
+    list.innerHTML = "";
+    pending.files.forEach((f, i) => list.append(el("li", {}, `📄 ${f.name}`, button("✕", "", () => { pending.files.splice(i, 1); refreshList(); }))));
+    pending.drive.forEach((d, i) => list.append(el("li", {}, `🔗 ${d.title}`, button("✕", "", () => { pending.drive.splice(i, 1); refreshList(); }))));
+  };
+  const input = el("input", { id: "files", type: "file", multiple: "", accept: ".pdf,image/*,.txt,.md", hidden: "" });
+  input.onchange = () => { pending.files.push(...input.files); input.value = ""; refreshList(); };
+  const drop = el("label", { class: "drop", for: "files" }, "📄 Ajouter des photos ou des PDF", el("span", {}, "Touche ici pour choisir, ou glisse les fichiers ici (20 images au maximum)."), input);
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); pending.files.push(...e.dataTransfer.files); refreshList(); };
+  const paste = el("textarea", { id: "paste", placeholder: "Colle ton texte ici…" });
+
+  const sources = el("section", { class: "sheet" },
+    el("h2", {}, `Ajouter un cours en ${mat().nom}`),
+    el("p", { class: "mute" }, "Ajoute une ou plusieurs sources, puis touche « Préparer mon cours »."),
+    drop,
+    driveBox(refreshList),
+    el("details", {}, el("summary", { class: "mute" }, "Coller du texte (par exemple un guide d'étude NotebookLM)"),
+      el("p", {}, el("label", { for: "paste", class: "mute" }, "Texte du cours")), paste),
+    list,
+    el("div", { class: "row" }, button("✨ Préparer mon cours", "big", (b) => prepare(b, paste.value.trim()))));
+  refreshList();
+  return [el("div", {}, button("← Mes cours", "ghost back", () => go("list"))), sources];
 }
 
-let picked = [];
-function pick(files) { picked = [...files]; if (!picked.length) return;
-  $("fileNames").textContent = "Fichier(s) : " + picked.map(f => f.name).join(", "); $("go").click(); }
-$("files").onchange = () => pick($("files").files);
-const drop = $("drop");
-drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files); };
+function driveBox(onAdd) {
+  const box = el("details", { class: "drive" }, el("summary", { class: "mute" }, "🔗 Importer depuis Google Drive (tes sources NotebookLM)"));
+  if (!mcp) { box.append(el("p", { class: "mute" }, "Disponible quand la page est ouverte dans claude.ai avec Google Drive connecté.")); return box; }
+  const q = el("input", { type: "search", id: "driveQ", placeholder: "Nom du document…" });
+  const results = el("ul", { class: "pick" });
+  const search = (b) => busy(b, "⏳ Recherche dans ton Google Drive…", async () => {
+    const term = q.value.trim().replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const query = (term ? `(title contains '${term}' or fullText contains '${term}') and ` : "") + "trashed = false and not mimeType contains 'folder'";
+    const res = await mcp.callTool(DRIVE, "search_files", { query, pageSize: 15, excludeContentSnippets: true });
+    const files = res.payload?.files || [];
+    results.innerHTML = "";
+    if (!files.length) results.append(el("li", { class: "mute" }, "Aucun document trouvé."));
+    for (const f of files) results.append(el("li", {}, el("label", {}, el("input", { type: "checkbox", value: f.id, "data-title": f.title }), txt(f.title))));
+  });
+  q.onkeydown = (e) => e.key === "Enter" && search(null);
+  const importSel = (b) => busy(b, "⏳ Import des documents depuis Google Drive…", async () => {
+    const picked = [...results.querySelectorAll("input:checked")];
+    if (!picked.length) throw { message: "Coche au moins un document." };
+    for (const c of picked) {
+      const res = await mcp.callTool(DRIVE, "read_file_content", { fileId: c.value });
+      pending.drive.push({ title: c.dataset.title, text: String(res.payload?.fileContent || "") });
+      c.checked = false;
+    }
+    onAdd();
+  });
+  box.append(el("p", { class: "mute" }, "NotebookLM ne se connecte pas directement : importe ici les documents Google Drive que tu as mis dans ton carnet NotebookLM."),
+    el("div", { class: "row" }, q, button("Chercher", "ghost", search)), results,
+    el("div", { class: "row" }, button("Importer la sélection", "ghost", importSel)));
+  return box;
+}
 
-$("go").onclick = (e) => busy(e.target, "⏳ Le prof lit ton cours et prépare les leçons… Patiente une à deux minutes.", async () => {
-  const { text, images } = await readFiles(picked);
-  const pasted = $("paste").value.trim();
-  if (!text.trim() && !images.length && !pasted) throw { message: "Ajoute un fichier ou colle du texte." };
-  let scans = "";
-  if (images.length && !imgMax) throw { code: "images_unavailable" };
-  for (let i = 0; i < images.length; i += imgMax) {
-    const part = images.slice(i, i + imgMax);
-    status(`⏳ Le prof lit tes photos ${i + 1} à ${i + part.length} sur ${images.length}…`);
-    scans += `\n[Pages ${i + 1} à ${i + part.length}]\n` + await ask(`Les images jointes sont des pages d'un cours (pages ${i + 1} à ${i + part.length}).
+async function prepare(b, pasted) {
+  await busy(b, "⏳ Le prof lit tes sources…", async () => {
+    const { text, images } = await readFiles(pending.files);
+    const drive = pending.drive.map(d => `Document Google Drive « ${d.title} » :\n${d.text}`).join("\n\n");
+    if (!text.trim() && !images.length && !pasted && !drive) throw { message: "Ajoute d'abord une photo, un PDF, un document ou du texte." };
+    let scans = "";
+    if (images.length && !imgMax) throw { code: "images_unavailable" };
+    for (let i = 0; i < images.length; i += imgMax) {
+      const part = images.slice(i, i + imgMax);
+      status(`⏳ Le prof lit tes photos ${i + 1} à ${i + part.length} sur ${images.length}…`);
+      scans += `\n[Pages ${i + 1} à ${i + part.length}]\n` + await ask(`Les images jointes sont des pages d'un cours (pages ${i + 1} à ${i + part.length}).
 Retranscris fidèlement tout leur contenu en Markdown : texte, formules, tableaux, exercices. Décris brièvement les schémas.
-Réponds avec la retranscription seule.`, { images: part, fresh: true });
-  }
-  const src = { images: [], text: `Voici le cours d'un élève.\n${text}${scans}${pasted ? `\nContenu collé (ex. NotebookLM) :\n${pasted}` : ""}` };
-  status("⏳ Le prof prépare le plan du cours…");
-  const plan = await ask(`${src.text}
+Réponds avec la retranscription seule.`, { images: part });
+    }
+    const source = `Voici le cours d'un élève (matière : ${mat().nom}).\n${text}${scans}${drive ? "\n" + drive : ""}${pasted ? `\nTexte collé :\n${pasted}` : ""}`;
+    status("⏳ Le prof prépare le plan du cours…");
+    const plan = await ask(`${source}
 
 Découpe ce cours en blocs progressifs, une notion par bloc (2 à 8 blocs), dans l'ordre où il faut les apprendre.
-Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "notions": string}]}`, { json: true, fresh: true });
-  if (!Array.isArray(plan?.blocs) || !plan.blocs.length) throw { code: "invalid_json" };
-  course = { titre: String(plan.titre || "Mon cours"), source: src.text, blocs: plan.blocs.map(b => ({ titre: String(b.titre), notions: String(b.notions || ""), cours: "", exercices: [] })) };
-  sources.set(course, src); courses.push(course); current = courses.length - 1; save(); render();
-  $("course").scrollIntoView({ behavior: "smooth" });
-  for (const [i, bloc] of course.blocs.entries()) {
-    status(`⏳ Le prof écrit la leçon ${i + 1} sur ${course.blocs.length} : ${bloc.titre}…`);
-    await fillBloc(course, bloc);
-  }
-});
+Réponds uniquement en JSON : {"titre": string, "blocs": [{"titre": string, "notions": string}]}`, { json: true });
+    if (!Array.isArray(plan?.blocs) || !plan.blocs.length) throw { code: "invalid_json" };
+    const c = { id: uid(), titre: String(plan.titre || "Mon cours"), source,
+      blocs: plan.blocs.map(x => ({ titre: String(x.titre), notions: String(x.notions || ""), cours: "", exercices: [] })) };
+    mat().cours.push(c); pending.files = []; pending.drive = [];
+    go("course", mat().cours.length - 1);
+    for (const [i, bloc] of c.blocs.entries()) {
+      status(`⏳ Le prof écrit la leçon ${i + 1} sur ${c.blocs.length} : ${bloc.titre}…`);
+      await fillBloc(c, bloc);
+    }
+  });
+}
 
-// Writes one block's lesson and exercises from the original course material.
+// Writes one block's lesson and exercises from the course's own material.
 async function fillBloc(c, bloc) {
-  const src = sources.get(c) || (c.source && { text: c.source, images: [] });
-  if (!src) throw { message: "Ajoute à nouveau ton cours pour terminer cette leçon." };
-  const r = await ask(`${src.text}
+  const r = await ask(`${c.source}
 
 Plan du cours : ${c.blocs.map(b => b.titre).join(" ; ")}.
 Écris le bloc « ${bloc.titre} » (notions : ${bloc.notions}) : un cours clair et complet (définitions, méthode,
 exemple résolu), puis 3 exercices NOUVEAUX, différents de ceux présents dans le cours (l'élève les a peut-être déjà faits),
 de difficulté croissante, avec une solution détaillée.
-Réponds uniquement en JSON : {"cours": string, "exercices": [${EX_SHAPE}]}`, { json: true, images: src.images, fresh: true });
+Réponds uniquement en JSON : {"cours": string, "exercices": [${EX_SHAPE}]}`, { json: true });
   if (typeof r?.cours !== "string" || !Array.isArray(r.exercices)) throw { code: "invalid_json" };
-  bloc.cours = r.cours; bloc.exercices = r.exercices; save(); render();
+  bloc.cours = r.cours; bloc.exercices = r.exercices; save(); if (course() === c && view === "course") render();
 }
 
-const md = (s) => DOMPurify.sanitize(marked.parse(String(s || "")));
-const txt = (s) => DOMPurify.sanitize(String(s || ""), { ALLOWED_TAGS: [] });
-function button(label, cls, onclick) { const b = document.createElement("button"); b.textContent = label; b.className = cls; b.onclick = () => onclick(b); return b; }
-
-function render() {
-  const root = $("course"); root.innerHTML = "";
-  const head = document.createElement("div");
-  head.innerHTML = `${course.exemple ? '<span class="tag">Exemple : ton cours apparaîtra ici</span>' : ""}<h2>2. ${txt(course.titre)}</h2>`;
-  root.append(head);
-  renderLib();
-  if (!course.exemple) {
-    const row = document.createElement("div"); row.className = "row";
-    const del = button("🗑 Supprimer ce cours", "ghost", () => {
-      if (!del.dataset.sure) { del.dataset.sure = "1"; del.textContent = "Toucher encore pour confirmer la suppression"; return; }
-      courses.splice(current, 1); open(courses.length - 1);
-    });
-    row.append(button("➕ Ajouter un autre cours", "ghost", () => { open(-1); scrollTo({ top: 0 }); }), del);
-    head.append(row);
-  }
-  if (course.source) root.append(askBox(course));
-  course.blocs.forEach((bloc, bi) => {
-    const d = document.createElement("details"); d.className = "bloc sheet"; d.open = bi === 0;
-    d.innerHTML = `<summary>${bi + 1}. ${txt(bloc.titre)}</summary>`;
+// ---------- course ----------
+function courseView(c) {
+  const head = el("div", {}, el("div", { class: "row" }, button("← Mes cours", "ghost back", () => go("list"))),
+    html("h2", "", `${txt(c.titre)}`));
+  const nodes = [head];
+  if (c.source) nodes.push(askBox(c));
+  c.blocs.forEach((bloc, bi) => {
+    const d = el("details", { class: "bloc sheet" }); d.open = bi === 0 || !bloc.cours;
+    d.append(html("summary", "", `${bi + 1}. ${txt(bloc.titre)}`));
     if (!bloc.cours) {
-      d.open = true;
-      const p = document.createElement("p"); p.className = "pending"; p.textContent = "Cette leçon n'est pas encore prête.";
-      d.append(p, button("Préparer cette leçon", "", (b) => busy(b, `⏳ Le prof écrit la leçon : ${bloc.titre}…`, () => fillBloc(course, bloc))));
-      root.append(d); return;
+      d.append(el("p", { class: "pending" }, "Cette leçon n'est pas encore prête."),
+        button("Préparer cette leçon", "", (b) => busy(b, `⏳ Le prof écrit la leçon : ${bloc.titre}…`, () => fillBloc(c, bloc))));
+      nodes.push(d); return;
     }
-    d.insertAdjacentHTML("beforeend", `<div class="cours">${md(bloc.cours)}</div>`);
-    const row = document.createElement("div"); row.className = "row";
-    row.append(
+    d.append(html("div", "cours", md(bloc.cours)), el("div", { class: "row" },
       button("🤔 Je ne comprends pas : explique plus simplement", "ghost", (b) => busy(b, "⏳ Le prof réexplique plus simplement…", async () => {
         bloc.cours = await ask(`Réécris ce cours pour qu'il soit plus facile à comprendre : phrases simples, analogies,
-étapes pas à pas, un exemple supplémentaire commenté. Ne perds aucune notion. Réponds avec le cours seul.\n\n${bloc.cours}`, { fresh: true });
+étapes pas à pas, un exemple supplémentaire commenté. Ne perds aucune notion. Réponds avec le cours seul.\n\n${bloc.cours}`);
         save(); render(); })),
       button("➕ D'autres exercices", "ghost", (b) => busy(b, "⏳ Le prof prépare d'autres exercices…", async () => {
         const r = await ask(`Cours :\n${bloc.cours}\n\nExercices déjà donnés (ne pas les répéter) :\n${bloc.exercices.map(x => x.enonce).join("\n---\n")}
 \nGénère 3 nouveaux exercices différents, difficulté croissante, avec solutions détaillées.
-Réponds uniquement en JSON : {"exercices": [${EX_SHAPE}]}`, { json: true, fresh: true });
+Réponds uniquement en JSON : {"exercices": [${EX_SHAPE}]}`, { json: true });
         if (!Array.isArray(r?.exercices)) throw { code: "invalid_json" };
-        bloc.exercices.push(...r.exercices); save(); render(); })));
-    d.append(row);
+        bloc.exercices.push(...r.exercices); save(); render(); }))));
     bloc.exercices.forEach((ex, ei) => d.append(exercise(ex, ei)));
-    root.append(d);
+    nodes.push(d);
   });
+  nodes.push(el("div", { class: "row" }, twoTap("🗑 Supprimer ce cours", "Toucher encore pour confirmer la suppression", "danger", () => {
+    mat().cours.splice(data.c, 1); data.c = mat().cours.length ? 0 : -1; go(narrow() ? "list" : (course() ? "course" : "add")); })));
+  return nodes;
 }
 
 // NotebookLM-style questions, answered only from the course's own material.
 function askBox(c) {
-  const box = document.createElement("section"); box.className = "sheet";
-  box.innerHTML = `<h2>❓ Pose une question sur ce cours</h2>
-    <p><label for="q" class="mute">Par exemple : « Résume-moi le chapitre 2 » ou « Quelle est la différence entre… ? »</label>
-    <textarea id="q" placeholder="Écris ta question ici…"></textarea></p>`;
-  const out = document.createElement("div"); out.className = "cours";
-  box.append(button("Demander au prof", "", (b) => {
-    const q = box.querySelector("#q").value.trim(); if (!q) return;
-    busy(b, "⏳ Le prof cherche la réponse dans ton cours…", async () => {
-      out.innerHTML = md(await ask(`${c.source}\n\nQuestion de l'élève : ${q}
+  const q = el("textarea", { id: "q", placeholder: "Écris ta question ici…" });
+  const out = el("div", { class: "cours" });
+  return el("details", { class: "sheet" }, el("summary", {}, "❓ Poser une question sur ce cours"),
+    el("p", {}, el("label", { for: "q", class: "mute" }, "Par exemple : « Résume-moi la partie 2 » ou « Quelle est la différence entre… ? »")), q,
+    el("div", { class: "row" }, button("Demander au prof", "", (b) => {
+      const question = q.value.trim(); if (!question) return;
+      busy(b, "⏳ Le prof cherche la réponse dans ton cours…", async () => {
+        out.className = "cours answer";
+        out.innerHTML = md(await ask(`${c.source}\n\nQuestion de l'élève : ${question}
 Réponds uniquement à partir du cours ci-dessus, simplement et clairement. Indique de quelle partie du cours vient la réponse.
-Si la réponse n'est pas dans le cours, dis-le, puis donne une brève réponse générale en le signalant.`, { fresh: true }));
-    });
-  }), out);
-  return box;
-}
-
-function renderLib() {
-  const lib = $("lib"); lib.hidden = !courses.length; lib.innerHTML = "<h2>Mes cours</h2>";
-  const row = document.createElement("div"); row.className = "libitem";
-  courses.forEach((c, i) => { const b = button(c.titre, "ghost", () => open(i)); b.setAttribute("aria-current", String(i === current)); row.append(b); });
-  lib.append(row);
+Si la réponse n'est pas dans le cours, dis-le, puis donne une brève réponse générale en le signalant.`));
+      });
+    })), out);
 }
 
 function exercise(ex, ei) {
-  const d = document.createElement("div"); d.className = "ex";
-  d.innerHTML = `<h3>Exercice ${ei + 1}</h3><div class="cours">${md(ex.enonce)}</div>`;
-  const id = "photo-" + Math.random().toString(36).slice(2);
-  const lbl = document.createElement("label"); lbl.className = "btn"; lbl.htmlFor = id;
-  const input = Object.assign(document.createElement("input"), { id, type: "file", accept: "image/*", hidden: true });
-  lbl.append("📷 Envoyer la photo de ma réponse", input);
-  input.onchange = () => input.files[0] && busy(lbl, "⏳ Le prof corrige ta réponse…", async () => {
+  const d = el("div", { class: "ex" }, el("h3", {}, `Exercice ${ei + 1}`), html("div", "cours", md(ex.enonce)));
+  const id = "photo-" + uid();
+  const input = el("input", { id, type: "file", accept: "image/*", hidden: "" });
+  const lbl = el("label", { class: "btn", for: id }, "📷 Envoyer la photo de ma réponse", input);
+  input.onchange = () => input.files[0] && busy(null, "⏳ Le prof corrige ta réponse…", async () => {
     ex.correction = await ask(`L'image jointe est la photo de la réponse d'un élève à cet exercice.
 
 Énoncé :\n${ex.enonce}\n\nSolution de référence :\n${ex.solution}
 
 Corrige la copie comme un prof : retranscris ce que l'élève a écrit, indique ce qui est juste, chaque erreur
-précise et pourquoi, donne une note sur 10, puis un conseil pour progresser. Si la photo est illisible, dis-le.`,
-      { images: [input.files[0]], fresh: true });
+précise et pourquoi, donne une note sur 10, puis un conseil pour progresser. Si la photo est illisible, dis-le.`, { images: [input.files[0]] });
     save(); render(); });
-  const sol = document.createElement("details"); sol.innerHTML = `<summary class="mute">Voir la réponse du prof</summary><div class="cours">${md(ex.solution)}</div>`;
-  const row = document.createElement("div"); row.className = "row"; row.append(lbl);
-  d.append(row, sol);
-  if (ex.correction) { const c = document.createElement("div"); c.className = "corr"; c.innerHTML = `<b>✅ Correction du prof</b>${md(ex.correction)}`; d.append(c); }
+  const reveal = twoTap("🙈 Afficher la réponse", "Sûr ? Toucher encore pour voir la réponse", "ghost", (b) => b.replaceWith(html("div", "answer cours", `<b>Réponse du prof</b>${md(ex.solution)}`)));
+  d.append(el("div", { class: "row" }, lbl, reveal));
+  if (ex.correction) d.append(html("div", "corr", `<b>✅ Correction du prof</b>${md(ex.correction)}`));
   return d;
 }
 
+// ---------- revision sheets ----------
+function fichesView() {
+  const m = mat();
+  const gen = el("section", { class: "sheet" }, el("h2", {}, `Fiches de révision : ${m.nom}`));
+  if (!m.cours.length) {
+    gen.append(el("p", { class: "empty mute" }, "Ajoute d'abord un cours dans cette matière pour créer une fiche."), button("➕ Ajouter un cours", "", () => go("add")));
+    return [gen];
+  }
+  const pick = el("ul", { class: "pick" });
+  m.cours.forEach((c, i) => pick.append(el("li", {}, el("label", {}, el("input", { type: "checkbox", value: i, checked: "" }), txt(c.titre)))));
+  gen.append(el("p", { class: "mute" }, "Choisis les cours à réviser (tous sont cochés : fiche sur toute la matière)."), pick,
+    el("div", { class: "row" }, button("📝 Créer la fiche de révision", "big", (b) => busy(b, "⏳ Le prof rédige ta fiche de révision…", async () => {
+      const chosen = [...pick.querySelectorAll("input:checked")].map(x => m.cours[Number(x.value)]);
+      if (!chosen.length) throw { message: "Coche au moins un cours." };
+      const content = chosen.map(c => `## ${c.titre}\n` + c.blocs.map(b => `### ${b.titre}\n${b.cours || b.notions}`).join("\n")).join("\n\n").slice(0, 200000);
+      const titre = chosen.length === m.cours.length ? `${m.nom} : toute la matière` : chosen.map(c => c.titre).join(", ");
+      const fiche = await ask(`Voici des cours de ${m.nom} :\n\n${content}
+
+Rédige une fiche de révision claire et compacte (1 à 2 pages) : notions clés, définitions, formules et règles à retenir,
+méthodes en étapes, pièges fréquents, et 5 questions d'auto-évaluation avec leurs réponses à la fin.
+Organise-la par titres. Réponds avec la fiche seule.`);
+      m.fiches.unshift({ id: uid(), titre, contenu: fiche }); save(); render();
+    }))));
+  const list = m.fiches.map((f, i) => {
+    const d = el("details", { class: "sheet" }); d.open = i === 0;
+    d.append(html("summary", "", txt(f.titre)), html("div", "cours", md(f.contenu)),
+      el("div", { class: "row" }, twoTap("🗑 Supprimer cette fiche", "Toucher encore pour confirmer", "danger", () => { m.fiches.splice(i, 1); save(); render(); })));
+    return d;
+  });
+  return [el("div", {}, button("← Mes cours", "ghost back", () => go("list"))), gen, ...list];
+}
+
+addEventListener("resize", () => { if (!narrow() && view === "list") go(course() ? "course" : "add"); });
 render();
 </script>

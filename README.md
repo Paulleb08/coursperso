@@ -4,13 +4,15 @@ Professeur particulier qui tourne avec ton compte Claude (claude.ai), **sans cl�
 
 **Ouvre l'app :** https://claude.ai/artifact/RngQoyyCCCM1Tn1UGktScT
 
-1. Téléverse tes cours (PDF, photos, texte) et/ou colle un export NotebookLM.
-2. Le cours est restructuré en blocs : cours + 3 exercices inédits avec solutions.
-3. Par bloc : « réexplique » (version plus simple), « nouveaux exercices ».
-4. Par exercice : envoie la photo de ta copie → correction détaillée + note sur 10.
+- **Matières** : chaque matière a ses cours et ses fiches de révision.
+- **Ajouter un cours** : photos ou PDF (20 images max), texte collé, ou documents Google Drive (tes sources NotebookLM).
+- **Leçons en blocs** avec 3 exercices inédits ; réponses cachées derrière un double toucher.
+- **Correction sur photo** de ta réponse, note sur 10 ; « explique plus simplement » ; « d'autres exercices ».
+- **Questions sur le cours** (comme NotebookLM) et **fiches de révision** sur quelques cours ou toute la matière.
+- **Téléphone** : barre d'onglets en bas (Cours, Ajouter, Fiches).
 
 À la première action, Claude te demande d'autoriser la page. L'usage compte sur ton abonnement Claude.
-NotebookLM n'a pas d'API publique : copie ton guide d'étude ou tes notes et colle-les.
+NotebookLM n'a pas d'API publique : importe les mêmes documents depuis Google Drive (connecteur claude.ai) ou colle ton guide d'étude.
 Le cours est gardé dans ton navigateur (localStorage).
 
 Test (Claude simulé) : `node tests/e2e.js` (nécessite Playwright).
