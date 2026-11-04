@@ -1,44 +1,43 @@
-// Mocked end-to-end test (no API key needed): node tests/e2e.js
-const fs = require('fs'), path = require('path'), os = require('os'); const D = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-'));
-fs.writeFileSync(path.join(D,'c.pdf'), '%PDF-1.4 fake'); fs.writeFileSync(path.join(D,'copie.png'), Buffer.from([0x89,0x50,0x4e,0x47]));
+// Mocked end-to-end test of the artifact page (fake window.claude "sample"): node tests/e2e.js
 const { chromium } = require('playwright'); const assert = require('assert');
-const sse = (text) => [
- ['message_start',{type:'message_start',message:{id:'m',type:'message',role:'assistant',model:'claude-opus-5-5',content:[],stop_reason:null,usage:{input_tokens:1,output_tokens:0}}}],
- ['content_block_start',{type:'content_block_start',index:0,content_block:{type:'text',text:''}}],
- ['content_block_delta',{type:'content_block_delta',index:0,delta:{type:'text_delta',text}}],
- ['content_block_stop',{type:'content_block_stop',index:0}],
- ['message_delta',{type:'message_delta',delta:{stop_reason:'end_turn'},usage:{output_tokens:5}}],
- ['message_stop',{type:'message_stop'}]].map(([e,d])=>`event: ${e}\ndata: ${JSON.stringify(d)}\n\n`).join('');
+const fs = require('fs'), path = require('path'), os = require('os');
+const D = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-'));
+fs.writeFileSync(path.join(D, 'cours.txt'), 'Dérivées : (xⁿ)′ = n·xⁿ⁻¹');
+fs.writeFileSync(path.join(D, 'copie.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 (async () => {
-  const b = await chromium.launch(); const p = await b.newPage(); const reqs = []; const errs = [];
-  p.on('pageerror', e => errs.push(e.message)); p.on('dialog', d => { errs.push('alert: '+d.message()); d.dismiss(); });
-  await p.route('https://api.anthropic.com/**', async r => {
-    const body = JSON.parse(r.request().postData()); reqs.push({ body, headers: r.request().headers() });
-    const last = body.messages[0].content.at(-1).text;
-    let out;
-    if (last.startsWith('Restructure')) out = JSON.stringify({titre:'Dérivées', blocs:[{titre:'Définition', cours:'Cours initial', exercices:[{enonce:'Dériver $x^3$', solution:'$3x^2$'}]}]});
-    else if (last.startsWith('Réécris')) out = 'Cours SIMPLIFIÉ';
-    else if (last.includes('ne pas les répéter')) out = JSON.stringify({exercices:[{enonce:'Nouvel exo inédit', solution:'s'}]});
-    else out = 'Note : 8/10 — bonne copie';
-    await r.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream' }, body: sse(out) });
+  const b = await chromium.launch(); const p = await b.newPage(); const errs = [];
+  p.on('pageerror', e => errs.push(e.message));
+  await p.exposeFunction('__log', () => {});
+  await p.addInitScript(() => {
+    window.__calls = [];
+    const reply = (prompt, o) => {
+      window.__calls.push({ prompt, o: { ...o, images: o?.images?.length || 0 } });
+      if (prompt.includes('Restructure')) return { titre: 'Dérivées', blocs: [{ titre: 'Puissances', cours: 'Cours initial', exercices: [{ enonce: 'Dériver x³', solution: '3x²' }] }] };
+      if (prompt.includes('ne pas les répéter')) return { exercices: [{ enonce: 'Nouvel exo inédit', solution: 's' }] };
+      if (prompt.includes('Réécris')) return 'Cours SIMPLIFIÉ';
+      return 'Note : 8/10, bonne copie';
+    };
+    const sample = async (prompt, o) => ({ text: reply(prompt, o), truncated: false });
+    sample.json = async (prompt, o) => reply(prompt, o);
+    sample.limits = async () => ({ maxPromptBytes: 262144, images: { maxCount: 5 } });
+    window.claude = { use: async (n) => n === 'sample' ? sample : null };
   });
   await p.goto('file://' + path.join(__dirname, '..', 'index.html'));
-  await p.fill('#key', 'sk-ant-test'); await p.dispatchEvent('#key', 'change');
-  await p.setInputFiles('#files', path.join(D,'c.pdf')); await p.fill('#paste', 'Notes NotebookLM');
-  await p.click('#go'); await p.waitForSelector('details.bloc');
-  await p.click('text=réexplique plus simplement'); await p.waitForSelector('text=Cours SIMPLIFIÉ');
-  await p.setInputFiles('.ex input[type=file]', path.join(D,'copie.png')); await p.waitForSelector('.corr');
+  await p.waitForSelector('text=Exemple');                       // example course at rest
+  await p.waitForTimeout(300);
+  await p.setInputFiles('#files', path.join(D, 'cours.txt')); await p.fill('#paste', 'Notes NotebookLM');
+  await p.click('#go'); await p.waitForSelector('summary:has-text("Puissances")');
+  await p.click('text=réexplique'); await p.waitForSelector('text=Cours SIMPLIFIÉ');
   await p.click('text=Nouveaux exercices'); await p.waitForSelector('text=Nouvel exo inédit');
-  const r4 = reqs[3].body; assert.equal(r4.output_config.format.type, 'json_schema'); assert.ok(r4.messages[0].content[0].text.includes('Dériver $x^3$'));
-  const [r1, r2, r3] = reqs.map(x => x.body);
-  assert.equal(reqs.length, 4); assert.equal(r1.model, 'claude-opus-5-5');
-  assert.equal(r1.messages[0].content[0].type, 'document'); assert.equal(r1.output_config.format.type, 'json_schema');
-  assert.ok(r1.messages[0].content.some(c => c.text?.includes('NotebookLM')));
-  assert.ok(!r2.output_config.format); assert.equal(r3.messages[0].content[0].type, 'image');
-  assert.ok(r3.messages[0].content[1].text.includes('$3x^2$'));
-  assert.ok(reqs[0].headers['anthropic-beta'].includes('server-side-fallback'));
+  await p.setInputFiles('.ex input[type=file]', path.join(D, 'copie.png')); await p.waitForSelector('.corr');
+  const calls = await p.evaluate(() => window.__calls);
+  assert.equal(calls.length, 4);
+  assert.ok(calls[0].prompt.includes('(xⁿ)′') && calls[0].prompt.includes('NotebookLM'));
+  assert.ok(calls[2].prompt.includes('Dériver x³'));             // existing exercises sent so they aren't repeated
+  assert.equal(calls[3].o.images, 1); assert.ok(calls[3].prompt.includes('3x²'));
   assert.ok((await p.textContent('.corr')).includes('8/10'));
+  assert.equal(await p.isHidden('#status'), true);
   assert.deepEqual(errs, []);
-  console.log('E2E OK: restructure, simplify, photo correction, new exercises; requests valid');
+  console.log('E2E OK: restructure, simplify, new exercises, photo correction via window.claude sample');
   await b.close();
 })().catch(e => { console.error('FAIL', e); process.exit(1); });
