@@ -62,6 +62,10 @@
   .choices button { justify-content:flex-start; text-align:left; background:var(--card); color:var(--ink); box-shadow:inset 0 0 0 1.5px var(--rule); font-weight:500; }
   .choices button.right { box-shadow:inset 0 0 0 3px var(--ok); color:var(--ok); font-weight:700; }
   .choices button.wrong { box-shadow:inset 0 0 0 3px var(--margin); color:var(--margin); }
+  .match { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .match .choices { margin-top:0; }
+  .match button[data-n]:not([data-n=""])::before { content:attr(data-n); display:inline-grid; place-items:center; min-width:1.6em; height:1.6em; border-radius:999px; background:var(--blue); color:var(--card); font-weight:700; margin-right:6px; }
+  .match button.selected { box-shadow:inset 0 0 0 3px var(--blue); }
   .score { font:800 2rem var(--display); color:var(--blue); text-align:center; margin:0; }
   .pending { color:var(--mute); font-style:italic; }
   .empty { text-align:center; padding:28px 16px; }
@@ -143,9 +147,10 @@ Pour les maths, écris en notation lisible sans LaTeX (x², √x, ≤, →, frac
 const EX_SHAPE = `{"enonce": string, "solution": string}`;
 let sample = null, mcp = null, imgMax = 0;
 (async () => {
+  await null; // let the rest of the script load before the first render, even outside claude.ai
   [sample, mcp] = window.claude ? await Promise.all([claude.use("sample"), claude.use("mcp")]) : [null, null];
   if (sample) imgMax = (await sample.limits().catch(() => null))?.images?.maxCount || 0;
-  if (!sample) status("Cette page doit être ouverte depuis claude.ai, connecté à ton compte Claude.", true);
+  else imgMax = MAX_IMAGES; // local mode reads photos with OCR, one by one
   render();
 })();
 
@@ -161,8 +166,43 @@ const ERRORS = { not_granted: "Tu n'as pas autorisé la page à utiliser Claude.
 
 function status(msg, err) { const s = $("status"); s.hidden = !msg; s.textContent = msg || ""; s.className = err ? "err" : ""; }
 
+// ---------- free local AI (used when the page runs as a standalone website) ----------
+const MODELS = {
+  leger: { id: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", nom: "Léger (téléphone, ~1 Go)" },
+  standard: { id: "Qwen2.5-3B-Instruct-q4f16_1-MLC", nom: "Standard (ordinateur, ~2 Go)" },
+  puissant: { id: "Qwen2.5-7B-Instruct-q4f16_1-MLC", nom: "Puissant (Mac récent, ~5 Go)" } };
+const LOCAL_LIMIT = 14000; // characters of prompt the small model's context can take
+let enginePromise = null, ocrWorker = null;
+const modelKey = () => store.get("model") || (narrow() ? "leger" : "standard");
+function localEngine() {
+  if (window.__PROF_LOCAL_ENGINE) return Promise.resolve(window.__PROF_LOCAL_ENGINE); // tests
+  if (!navigator.gpu) return Promise.reject({ message: "Ce navigateur ne peut pas faire tourner l'IA gratuite. Utilise Chrome ou Edge récent, ou Safari 26 (Mac, iPhone)." });
+  return enginePromise ||= Promise.all([import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/+esm"), navigator.gpu.requestAdapter()]).then(([webllm, gpu]) =>
+    // GPUs without 16-bit float shaders need the f32 build of the same model.
+    webllm.CreateMLCEngine(gpu?.features.has("shader-f16") ? MODELS[modelKey()].id : MODELS[modelKey()].id.replace("q4f16_1", "q4f32_1"), {
+      initProgressCallback: (r) => status(`⏳ Préparation de l'IA gratuite (une seule fois) : ${Math.round((r.progress || 0) * 100)} %`) },
+      { context_window_size: 8192 })).catch(e => { enginePromise = null; throw { message: "Impossible de charger l'IA gratuite : " + (e?.message || e) }; });
+}
+async function ocr(blob) {
+  if (window.__PROF_OCR) return window.__PROF_OCR(blob); // tests
+  if (!ocrWorker) { const T = await import("https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/+esm"); ocrWorker = await (T.default || T).createWorker("fra"); }
+  return (await ocrWorker.recognize(blob)).data.text;
+}
+const parseJSON = (t) => { try { return JSON.parse(t); } catch { const m = String(t).match(/[\[{][\s\S]*[\]}]/); if (m) try { return JSON.parse(m[0]); } catch {} } throw { code: "invalid_json" }; };
+async function askLocal(prompt, { json, images }) {
+  const engine = await localEngine();
+  for (const [i, img] of (images || []).entries()) prompt = `Texte lu sur l'image ${i + 1} (lecture automatique, peut contenir des fautes) :\n${await ocr(img)}\n\n` + prompt;
+  if (prompt.length > LOCAL_LIMIT) prompt = prompt.slice(0, LOCAL_LIMIT - 2500) + "\n[… cours raccourci pour l'IA gratuite …]\n" + prompt.slice(-2500);
+  if (json) prompt += "\nRéponds uniquement avec le JSON demandé, sans aucun texte avant ou après.";
+  const r = await engine.chat.completions.create({ messages: [{ role: "system", content: RULES }, { role: "user", content: prompt }],
+    temperature: 0.4, max_tokens: 2500 }); // JSON is read from the reply text: WebLLM's forced JSON mode fails on some models
+  const text = r.choices?.[0]?.message?.content || "";
+  if (!text.trim()) throw { message: "L'IA gratuite n'a rien répondu. Réessaie." };
+  return json ? parseJSON(text) : text;
+}
+
 async function ask(prompt, { json, images } = {}) {
-  if (!sample) throw { message: "Ouvre cette page dans Claude (claude.ai)." };
+  if (!sample) return askLocal(prompt, { json, images });
   const opts = { cache: false, ...(images?.length && { images }) };
   return json ? sample.json(RULES + "\n\n" + prompt, opts) : (await sample(RULES + "\n\n" + prompt, opts)).text;
 }
@@ -284,12 +324,22 @@ function addView() {
     list,
     el("div", { class: "row" }, button("✨ Préparer mon cours", "big", (b) => prepare(b, paste.value.trim()))));
   refreshList();
-  return [el("div", {}, button("← Mes cours", "ghost back", () => go("list"))), sources];
+  return [el("div", {}, button("← Mes cours", "ghost back", () => go("list"))), sources, ...(sample ? [] : [localSettings()])];
+}
+
+function localSettings() {
+  const sel = el("select", { id: "model" });
+  for (const [k, m] of Object.entries(MODELS)) sel.append(el("option", { value: k }, m.nom));
+  sel.value = modelKey();
+  sel.onchange = () => { store.set("model", sel.value); enginePromise = null; status("Taille d'IA changée : elle sera téléchargée à la prochaine action."); };
+  return el("details", { class: "sheet" }, el("summary", {}, "⚙️ IA gratuite (réglages)"),
+    el("p", { class: "mute" }, "Cette version du site utilise une IA gratuite qui tourne dans ton navigateur : rien n'est envoyé sur internet. Elle est téléchargée une seule fois, puis gardée. Elle est moins douée que Claude : relis ses réponses."),
+    el("p", {}, el("label", { for: "model", class: "mute" }, "Taille de l'IA"), el("br"), sel));
 }
 
 function driveBox(onAdd) {
   const box = el("details", { class: "drive" }, el("summary", { class: "mute" }, "🔗 Importer depuis Google Drive (tes sources NotebookLM)"));
-  if (!mcp) { box.append(el("p", { class: "mute" }, "Disponible quand la page est ouverte dans claude.ai avec Google Drive connecté.")); return box; }
+  if (!mcp) { box.append(el("p", { class: "mute" }, "Disponible seulement dans la version claude.ai. Ici, ouvre ton document Google Drive, copie son texte et colle-le ci-dessous.")); return box; }
   const q = el("input", { type: "search", id: "driveQ", placeholder: "Nom du document…" });
   const results = el("ul", { class: "pick" });
   const search = (b) => busy(b, "⏳ Recherche dans ton Google Drive…", async () => {
@@ -325,7 +375,11 @@ async function prepare(b, pasted) {
     if (!text.trim() && !images.length && !pasted && !drive) throw { message: "Ajoute d'abord une photo, un PDF, un document ou du texte." };
     let scans = "";
     if (images.length && !imgMax) throw { code: "images_unavailable" };
-    for (let i = 0; i < images.length; i += imgMax) {
+    if (!sample) for (const [i, img] of images.entries()) {
+      status(`⏳ Lecture de tes photos : ${i + 1} sur ${images.length}…`);
+      scans += `\n[Page ${i + 1}]\n` + await ocr(img);
+    }
+    else for (let i = 0; i < images.length; i += imgMax) {
       const part = images.slice(i, i + imgMax);
       status(`⏳ Le prof lit tes photos ${i + 1} à ${i + part.length} sur ${images.length}…`);
       scans += `\n[Pages ${i + 1} à ${i + part.length}]\n` + await ask(`Les images jointes sont des pages d'un cours (pages ${i + 1} à ${i + part.length}).
@@ -418,14 +472,24 @@ function exercise(ex, ei) {
   const id = "photo-" + uid();
   const input = el("input", { id, type: "file", accept: "image/*", hidden: "" });
   const lbl = el("label", { class: "btn", for: id }, "📷 Envoyer la photo de ma réponse", input);
-  input.onchange = () => input.files[0] && busy(null, "⏳ Le prof corrige ta réponse…", async () => {
-    ex.correction = await ask(`L'image jointe est la photo de la réponse d'un élève à cet exercice.
+  const correct = (answer, images) => busy(null, "⏳ Le prof corrige ta réponse…", async () => {
+    ex.correction = await ask(`${answer ? `Réponse de l'élève (lue sur sa photo) :\n${answer}` : "L'image jointe est la photo de la réponse d'un élève à cet exercice."}
 
 Énoncé :\n${ex.enonce}\n\nSolution de référence :\n${ex.solution}
 
 Corrige la copie comme un prof : retranscris ce que l'élève a écrit, indique ce qui est juste, chaque erreur
-précise et pourquoi, donne une note sur 10, puis un conseil pour progresser. Si la photo est illisible, dis-le.`, { images: [input.files[0]] });
+précise et pourquoi, donne une note sur 10, puis un conseil pour progresser. Si la photo est illisible, dis-le.`, { images });
     save(); render(); });
+  input.onchange = () => { const f = input.files[0]; if (!f) return;
+    if (sample) return correct("", [f]);
+    // Free mode: reading handwriting is imperfect, so the student checks the text first.
+    busy(null, "⏳ Lecture de ta photo…", async () => {
+      const box = el("textarea", { id: "ocr-" + id }); box.value = await ocr(f);
+      const check = el("div", { class: "answer" }, el("label", { for: "ocr-" + id, class: "mute" }, "Voici ce que le prof a lu sur ta photo. Corrige les erreurs de lecture si besoin :"), box,
+        el("div", { class: "row" }, button("✅ Corriger ma réponse", "", () => correct(box.value.trim(), []))));
+      d.querySelector(".answer.ocr")?.remove(); check.classList.add("ocr"); d.append(check);
+    });
+  };
   const reveal = twoTap("🙈 Afficher la réponse", "Sûr ? Toucher encore pour voir la réponse", "ghost", (b) => b.replaceWith(html("div", "answer cours", `<b>Réponse du prof</b>${md(ex.solution)}`)));
   d.append(el("div", { class: "row" }, lbl, reveal));
   if (ex.correction) d.append(html("div", "corr", `<b>✅ Correction du prof</b>${md(ex.correction)}`));
@@ -468,11 +532,16 @@ Réponds uniquement en JSON : {"cartes": [{"recto": string, "verso": string}]}`,
       if (!cartes.length) throw { code: "invalid_json" };
       m.flash.unshift({ id: uid(), titre: titleFor(m, ch), cartes });
     } else {
-      const r = await ask(base + `Crée un quiz de 10 questions à choix multiples sur ces cours, de difficulté progressive.
-Chaque question a 4 choix et une seule bonne réponse ; les mauvais choix doivent être plausibles. Ajoute une courte explication.
-Réponds uniquement en JSON : {"questions": [{"question": string, "choix": [string, string, string, string], "bonne": number (0 à 3), "explication": string}]}`, { json: true });
-      const questions = (r?.questions || []).filter(q => q?.question && Array.isArray(q.choix) && q.choix.length >= 2 && Number.isInteger(q.bonne) && q.bonne >= 0 && q.bonne < q.choix.length)
-        .map(q => ({ question: String(q.question), choix: q.choix.map(String), bonne: q.bonne, explication: String(q.explication || "") }));
+      const r = await ask(base + `Crée un quiz de 10 questions sur ces cours, de difficulté progressive, qui mélange trois types :
+- "qcm" (environ 4) : 4 choix plausibles, une seule bonne réponse ("bonne" = numéro du bon choix, de 0 à 3) ;
+- "ouverte" (environ 3) : une question à laquelle on répond en une ou deux phrases, avec la réponse attendue ;
+- "relier" (environ 3) : 4 paires à relier (par exemple notion ↔ définition, formule ↔ nom, date ↔ événement).
+Ajoute à chaque question une courte explication.
+Réponds uniquement en JSON : {"questions": [
+ {"type": "qcm", "question": string, "choix": [string, string, string, string], "bonne": number, "explication": string},
+ {"type": "ouverte", "question": string, "reponse": string, "explication": string},
+ {"type": "relier", "question": string, "paires": [{"gauche": string, "droite": string}], "explication": string}]}`, { json: true });
+      const questions = (r?.questions || []).map(cleanQuestion).filter(Boolean);
       if (!questions.length) throw { code: "invalid_json" };
       m.quiz.unshift({ id: uid(), titre: titleFor(m, ch), questions });
     }
@@ -486,7 +555,7 @@ Réponds uniquement en JSON : {"questions": [{"question": string, "choix": [stri
       twoTap("🗑 Supprimer", "Toucher encore pour confirmer", "danger", () => { list.splice(i, 1); save(); render(); }))));
   return [back("← Mes cours", () => go("list")), gen,
     ...items(m.flash, "flash", "🃏 Flashcards", x => `${x.cartes.length} cartes`),
-    ...items(m.quiz, "quiz", "❓ Quiz", x => `${x.questions.length} questions` + (x.best != null ? ` · meilleur score : ${x.best}/${x.questions.length}` : ""))];
+    ...items(m.quiz, "quiz", "❓ Quiz", x => `${x.questions.length} questions (QCM, questions / réponses, relie les points)` + (x.best != null ? ` · meilleur score : ${x.best}/${x.questions.length}` : ""))];
 }
 
 function flashPlayer(deck) {
@@ -515,6 +584,22 @@ function flashPlayer(deck) {
   draw(); return box;
 }
 
+// Keeps only well-formed questions; old quizzes without a type are QCM.
+function cleanQuestion(q) {
+  if (!q?.question) return null;
+  const base = { question: String(q.question), explication: String(q.explication || "") };
+  const type = q.type || "qcm";
+  if (type === "qcm" && Array.isArray(q.choix) && q.choix.length >= 2 && Number.isInteger(q.bonne) && q.bonne >= 0 && q.bonne < q.choix.length)
+    return { type, ...base, choix: q.choix.map(String), bonne: q.bonne };
+  if (type === "ouverte" && q.reponse) return { type, ...base, reponse: String(q.reponse) };
+  if (type === "relier" && Array.isArray(q.paires)) {
+    const paires = q.paires.filter(x => x?.gauche && x?.droite).map(x => ({ gauche: String(x.gauche), droite: String(x.droite) }));
+    if (paires.length >= 2) return { type, ...base, paires };
+  }
+  return null;
+}
+const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
 function quizPlayer(qz) {
   const box = el("section", { class: "sheet" });
   let pos = 0, score = 0;
@@ -527,16 +612,62 @@ function quizPlayer(qz) {
         el("div", { class: "row" }, button("🔁 Recommencer le quiz", "", () => { pos = 0; score = 0; draw(); })));
       return;
     }
-    const q = qz.questions[pos];
-    const choices = el("div", { class: "choices" });
-    box.append(el("p", { class: "mute" }, `Question ${pos + 1} sur ${qz.questions.length} · score : ${score}`), html("div", "cours", md(q.question)), choices);
-    q.choix.forEach((label, i) => choices.append(button(`${"ABCD"[i] || i + 1}. ${label}`, "", () => {
-      if (choices.dataset.done) return; choices.dataset.done = "1";
-      if (i === q.bonne) score++;
-      [...choices.children].forEach((b, j) => { b.disabled = j !== i && j !== q.bonne; if (j === q.bonne) b.classList.add("right"); else if (j === i) b.classList.add("wrong"); });
-      box.append(html("div", "answer cours", `<b>${i === q.bonne ? "✅ Bonne réponse !" : "❌ Pas tout à fait."}</b>${md(q.explication)}`),
+    const q = cleanQuestion(qz.questions[pos]) || { type: "ouverte", question: "(question illisible)", reponse: "", explication: "" };
+    const kind = { qcm: "QCM", ouverte: "Question / réponse", relier: "Relie les points" }[q.type];
+    box.append(el("p", { class: "mute" }, `Question ${pos + 1} sur ${qz.questions.length} · ${kind} · score : ${score}`), html("div", "cours", md(q.question)));
+    // Shows the result once, adds the point, then offers the next question.
+    const finish = (ok, extra = "") => {
+      if (ok) score++;
+      box.append(html("div", "answer cours", `<b>${ok ? "✅ Bonne réponse !" : "❌ Pas tout à fait."}</b>${extra}${md(q.explication)}`),
         el("div", { class: "row" }, button(pos + 1 < qz.questions.length ? "Question suivante →" : "Voir mon score", "big", () => { pos++; draw(); })));
-    })));
+    };
+    if (q.type === "qcm") {
+      const choices = el("div", { class: "choices" }); box.append(choices);
+      q.choix.forEach((label, i) => choices.append(button(`${"ABCD"[i] || i + 1}. ${label}`, "", () => {
+        if (choices.dataset.done) return; choices.dataset.done = "1";
+        [...choices.children].forEach((b, j) => { b.disabled = j !== i && j !== q.bonne; if (j === q.bonne) b.classList.add("right"); else if (j === i) b.classList.add("wrong"); });
+        finish(i === q.bonne);
+      })));
+    } else if (q.type === "ouverte") {
+      const id = "open-" + uid(), input = el("textarea", { id, placeholder: "Écris ta réponse ici…" });
+      const check = el("div", { class: "row" });
+      const judge = (ok) => { check.remove(); finish(ok); };
+      check.append(button("Voir la réponse attendue", "", () => {
+        input.readOnly = true;
+        check.replaceChildren(html("div", "answer cours", `<b>Réponse attendue</b>${md(q.reponse)}`),
+          button("✓ J'avais juste", "", () => judge(true)), button("✗ J'avais faux", "danger", () => judge(false)),
+          button("🤔 Demander au prof", "ghost", (b) => busy(b, "⏳ Le prof vérifie ta réponse…", async () => {
+            const v = await ask(`Question : ${q.question}\nRéponse attendue : ${q.reponse}\nRéponse de l'élève : ${input.value}
+La réponse de l'élève est-elle juste sur le fond (même si elle est formulée autrement) ? Commence par « JUSTE » ou « FAUX », puis explique en une phrase.`);
+            check.remove(); finish(/^\W*juste/i.test(v), md(v));
+          })));
+      }));
+      box.append(el("label", { for: id, class: "mute" }, "Ta réponse"), input, check);
+    } else {
+      // Tap an item on the left, then its match on the right.
+      const right = shuffle(q.paires.map((x, i) => ({ text: x.droite, i })));
+      const links = new Map(); let sel = null;
+      const grid = el("div", { class: "match" }), colL = el("div", { class: "choices" }), colR = el("div", { class: "choices" });
+      grid.append(colL, colR); box.append(el("p", { class: "mute" }, "Touche un élément à gauche, puis celui qui va avec à droite."), grid);
+      const paint = () => {
+        [...colL.children].forEach((b, i) => { b.classList.toggle("selected", sel === i); b.dataset.n = links.has(i) ? [...links.keys()].indexOf(i) + 1 : ""; });
+        [...colR.children].forEach((b) => { const k = [...links].find(([, r]) => r === Number(b.dataset.i)); b.dataset.n = k ? [...links.keys()].indexOf(k[0]) + 1 : ""; });
+        verify.disabled = links.size < q.paires.length;
+      };
+      q.paires.forEach((x, i) => colL.append(button(x.gauche, "", () => { if (grid.dataset.done) return; sel = i; links.delete(i); paint(); })));
+      right.forEach((x) => { const b = button(x.text, "", () => {
+        if (grid.dataset.done || sel === null) return;
+        for (const [k, r] of links) if (r === x.i) links.delete(k);
+        links.set(sel, x.i); sel = null; paint(); }); b.dataset.i = x.i; colR.append(b); });
+      const verify = button("Vérifier", "big", () => {
+        grid.dataset.done = "1"; verify.remove();
+        let good = 0;
+        [...colL.children].forEach((b, i) => { const ok = links.get(i) === i; good += ok; b.classList.add(ok ? "right" : "wrong"); });
+        const sol = q.paires.map(x => `- ${x.gauche} → ${x.droite}`).join("\n");
+        finish(good === q.paires.length, `<p>${good} sur ${q.paires.length} bien reliés.</p>${good === q.paires.length ? "" : md("**Les bonnes paires :**\n" + sol)}`);
+      });
+      box.append(el("div", { class: "row" }, verify)); paint();
+    }
   };
   draw(); return box;
 }
