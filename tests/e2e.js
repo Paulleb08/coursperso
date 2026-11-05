@@ -11,6 +11,8 @@ const mock = () => {
   window.__calls = []; window.__mcp = [];
   const reply = (prompt, o) => {
     const n = o?.images?.length || 0; window.__calls.push({ prompt, images: n });
+    if (prompt.includes('flashcards')) return { cartes: [{ recto: 'RECTO 1', verso: 'VERSO 1' }, { recto: 'RECTO 2', verso: 'VERSO 2' }] };
+    if (prompt.includes('quiz de')) return { questions: [{ question: 'Q1 ?', choix: ['a', 'b', 'c', 'd'], bonne: 1, explication: 'EXPLI 1' }, { question: 'Q2 ?', choix: ['a', 'b', 'c', 'd'], bonne: 0, explication: 'EXPLI 2' }] };
     if (prompt.includes('Retranscris')) return 'Texte retranscrit ' + n;
     if (prompt.includes('Question de l')) return 'Réponse tirée du cours';
     if (prompt.includes('fiche de révision')) return '# Fiche\nÀ retenir : (xⁿ)′';
@@ -70,6 +72,21 @@ const mock = () => {
   await p.waitForSelector('text=Maths : toute la matière');
   assert.ok((await p.evaluate(() => window.__calls.at(-1).prompt)).includes('Cours SIMPLIFIÉ'));
 
+  // flashcards: flip, mark, review missed
+  await p.click('aside >> text=Flashcards et quiz'); await p.click('text=Créer des flashcards'); await p.waitForSelector('text=2 cartes');
+  await p.click('text=Commencer >> nth=0'); await p.waitForSelector('text=RECTO 1');
+  assert.equal(await p.isVisible('text=VERSO 1'), false);
+  await p.click('text=Retourner la carte'); await p.waitForSelector('text=VERSO 1'); await p.click('text=Je savais');
+  await p.click('text=Retourner la carte'); await p.click('text=À revoir'); await p.waitForSelector('text=Tu savais 1 cartes sur 2');
+  await p.click('text=Revoir les 1 cartes'); await p.waitForSelector('text=RECTO 2');
+  // quiz: wrong then right answer, explanation, score kept
+  await p.click('text=Retour aux flashcards et quiz'); await p.click('text=Créer un quiz'); await p.waitForSelector('text=2 questions');
+  await p.click('section:has-text("❓ Quiz") >> text=Commencer'); await p.waitForSelector('text=Q1 ?');
+  await p.click('text=A. a'); await p.waitForSelector('text=EXPLI 1'); await p.waitForSelector('text=Pas tout à fait');
+  await p.click('text=Question suivante'); await p.click('text=A. a'); await p.waitForSelector('text=Bonne réponse');
+  await p.click('text=Voir mon score'); await p.waitForSelector('.score:has-text("1 / 2")');
+  await p.click('text=Retour aux flashcards et quiz'); await p.waitForSelector('text=meilleur score : 1/2');
+
   // switch subject and back, then reload
   await p.selectOption('#matiere', { label: 'Mes cours (0)' }); await p.waitForSelector('text=Ajouter un cours en Mes cours');
   await p.selectOption('#matiere', { label: 'Maths (1)' }); await p.waitForSelector('text=Cours SIMPLIFIÉ');
@@ -82,6 +99,7 @@ const mock = () => {
   await p.click('.tabs >> text=Cours'); assert.equal(await p.isVisible('aside'), true); assert.equal(await p.isVisible('main'), false);
   await p.click('aside >> text=Dérivées'); await p.waitForSelector('text=Cours SIMPLIFIÉ'); assert.equal(await p.isVisible('aside'), false);
   await p.click('.tabs >> text=Fiches'); await p.waitForSelector('text=Maths : toute la matière');
+  await p.click(".tabs >> text=S'entraîner"); await p.waitForSelector('text=meilleur score : 1/2');
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 
   // delete course needs two taps
@@ -89,6 +107,6 @@ const mock = () => {
   await p.click('text=Supprimer ce cours'); await p.click('text=Toucher encore pour confirmer la suppression');
   await p.waitForSelector('aside >> text=Aucun cours');
   assert.deepEqual(errs, []);
-  console.log('E2E OK: subjects, Drive import, 20-image batching, hidden answers, lessons, Q&A, revision sheets, phone layout');
+  console.log('E2E OK: subjects, Drive import, 20-image batching, hidden answers, lessons, Q&A, revision sheets, flashcards, quiz, phone layout');
   await b.close();
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

@@ -8,6 +8,7 @@ Professeur particulier qui tourne avec ton compte Claude (claude.ai), **sans cl�
 - **Ajouter un cours** : photos ou PDF (20 images max), texte collé, ou documents Google Drive (tes sources NotebookLM).
 - **Leçons en blocs** avec 3 exercices inédits ; réponses cachées derrière un double toucher.
 - **Correction sur photo** de ta réponse, note sur 10 ; « explique plus simplement » ; « d'autres exercices ».
+- **Flashcards et quiz** (onglet « S'entraîner ») sur quelques cours ou toute la matière, avec score.
 - **Questions sur le cours** (comme NotebookLM) et **fiches de révision** sur quelques cours ou toute la matière.
 - **Téléphone** : barre d'onglets en bas (Cours, Ajouter, Fiches).
 

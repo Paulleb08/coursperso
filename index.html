@@ -56,6 +56,13 @@
   .pick input { width:22px; height:22px; flex:none; }
   .answer { background:var(--paper); border-radius:8px; padding:10px 14px; margin-top:10px; }
   .corr { background:var(--paper); border-left:3px solid var(--ok); padding:10px 14px; margin-top:12px; border-radius:0 8px 8px 0; }
+  .card { display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; gap:12px; min-height:200px; padding:24px; border:2px solid var(--blue); border-radius:14px; background:var(--paper); font-size:1.2rem; }
+  .card .verso { border-top:1px dashed var(--rule); padding-top:12px; width:100%; }
+  .choices { display:grid; gap:8px; margin-top:12px; }
+  .choices button { justify-content:flex-start; text-align:left; background:var(--card); color:var(--ink); box-shadow:inset 0 0 0 1.5px var(--rule); font-weight:500; }
+  .choices button.right { box-shadow:inset 0 0 0 3px var(--ok); color:var(--ok); font-weight:700; }
+  .choices button.wrong { box-shadow:inset 0 0 0 3px var(--margin); color:var(--margin); }
+  .score { font:800 2rem var(--display); color:var(--blue); text-align:center; margin:0; }
   .pending { color:var(--mute); font-style:italic; }
   .empty { text-align:center; padding:28px 16px; }
   #status { position:sticky; top:env(safe-area-inset-top, 0px); z-index:5; font:600 1.05rem var(--ui); background:var(--blue); color:var(--card); padding:12px 16px; border-radius:8px; max-width:1180px; margin:0 auto 12px; }
@@ -73,7 +80,7 @@
     .back { display:inline-flex; }
     .sheet { padding:16px 14px 16px 28px; }
     .sheet::before { left:14px; }
-    .tabs { display:grid; grid-template-columns:repeat(3, 1fr); position:fixed; left:0; right:0; bottom:0; z-index:10;
+    .tabs { display:grid; grid-template-columns:repeat(4, 1fr); position:fixed; left:0; right:0; bottom:0; z-index:10;
       background:var(--card); border-top:1px solid var(--rule);
       padding:6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
     .tabs button { flex-direction:column; gap:2px; background:transparent; color:var(--mute); font-size:.85rem; min-height:56px; }
@@ -98,6 +105,7 @@
 <nav class="tabs" aria-label="Navigation">
   <button data-tab="list"><span>📚</span>Cours</button>
   <button data-tab="add"><span>➕</span>Ajouter</button>
+  <button data-tab="train"><span>🎯</span>S'entraîner</button>
   <button data-tab="fiches"><span>📝</span>Fiches</button>
 </nav>
 
@@ -178,7 +186,8 @@ function twoTap(label, confirmLabel, cls, action) {
 }
 
 // ---------- navigation ----------
-function go(v, c) { if (c !== undefined) data.c = c; view = v; save(); render(); scrollTo({ top: 0 }); }
+let play = null; // flashcard deck or quiz being played: {kind, id}
+function go(v, c) { if (c !== undefined) data.c = c; view = v; play = null; save(); render(); scrollTo({ top: 0 }); }
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => go(b.dataset.tab));
 $("matiere").onchange = () => { data.m = Number($("matiere").value); data.c = mat().cours.length ? 0 : -1; go(narrow() ? "list" : (course() ? "course" : "add")); };
 $("newSubject").onclick = () => {
@@ -203,6 +212,7 @@ function render() {
   const main = $("main"); main.innerHTML = "";
   if (view === "add") main.append(...addView());
   else if (view === "fiches") main.append(...fichesView());
+  else if (view === "train") main.append(...trainView());
   else if (course()) main.append(...courseView(course()));
   else main.append(...addView());
 }
@@ -214,6 +224,7 @@ function renderAside() {
   mat().cours.forEach((c, i) => a.append(el("button", { class: "navbtn", "aria-current": String(view === "course" && i === data.c), onclick: () => go("course", i) }, `📘 ${c.titre}`)));
   a.append(el("h2", {}, "Outils"),
     el("button", { class: "navbtn", "aria-current": String(view === "add"), onclick: () => go("add") }, "➕ Ajouter un cours"),
+    el("button", { class: "navbtn", "aria-current": String(view === "train"), onclick: () => go("train") }, "🎯 Flashcards et quiz"),
     el("button", { class: "navbtn", "aria-current": String(view === "fiches"), onclick: () => go("fiches") }, "📝 Fiches de révision"));
   if (data.matieres.length > 1) a.append(twoTap(`🗑 Supprimer la matière « ${mat().nom} »`, "Toucher encore : supprime aussi ses cours et fiches", "danger", () => {
     data.matieres.splice(data.m, 1); data.m = 0; data.c = mat().cours.length ? 0 : -1; go(narrow() ? "list" : "add"); }));
@@ -421,6 +432,115 @@ précise et pourquoi, donne une note sur 10, puis un conseil pour progresser. Si
   return d;
 }
 
+// ---------- shared: choose courses of a subject ----------
+function pickCourses(m) {
+  const ul = el("ul", { class: "pick" });
+  m.cours.forEach((c, i) => ul.append(el("li", {}, el("label", {}, el("input", { type: "checkbox", value: i, checked: "" }), txt(c.titre)))));
+  return { ul, chosen: () => { const r = [...ul.querySelectorAll("input:checked")].map(x => m.cours[Number(x.value)]);
+    if (!r.length) throw { message: "Coche au moins un cours." }; return r; } };
+}
+const courseText = (chosen) => chosen.map(c => `## ${c.titre}\n` + c.blocs.map(b => `### ${b.titre}\n${b.cours || b.notions}`).join("\n")).join("\n\n").slice(0, 200000);
+const titleFor = (m, chosen) => chosen.length === m.cours.length ? `${m.nom} : toute la matière` : chosen.map(c => c.titre).join(", ");
+
+// ---------- flashcards and quizzes ----------
+function trainView() {
+  const m = mat(); m.flash ||= []; m.quiz ||= [];
+  const back = (label, fn) => el("div", {}, button(label, "ghost back", fn));
+  if (play) {
+    const item = (play.kind === "flash" ? m.flash : m.quiz).find(x => x.id === play.id);
+    if (item) return [el("div", {}, button("← Retour aux flashcards et quiz", "ghost", () => { play = null; render(); })),
+      play.kind === "flash" ? flashPlayer(item) : quizPlayer(item)];
+    play = null;
+  }
+  const gen = el("section", { class: "sheet" }, el("h2", {}, `S'entraîner : ${m.nom}`));
+  if (!m.cours.length) {
+    gen.append(el("p", { class: "empty mute" }, "Ajoute d'abord un cours dans cette matière pour créer des flashcards ou un quiz."), button("➕ Ajouter un cours", "", () => go("add")));
+    return [back("← Mes cours", () => go("list")), gen];
+  }
+  const { ul, chosen } = pickCourses(m);
+  const create = (kind) => (b) => busy(b, kind === "flash" ? "⏳ Le prof prépare tes flashcards…" : "⏳ Le prof prépare ton quiz…", async () => {
+    const ch = chosen(), base = `Voici des cours de ${m.nom} :\n\n${courseText(ch)}\n\n`;
+    if (kind === "flash") {
+      const r = await ask(base + `Crée 15 flashcards pour mémoriser ces cours : une notion, définition, formule ou date par carte.
+Le recto pose une question courte, le verso donne la réponse en une ou deux phrases.
+Réponds uniquement en JSON : {"cartes": [{"recto": string, "verso": string}]}`, { json: true });
+      const cartes = (r?.cartes || []).filter(c => c?.recto && c?.verso).map(c => ({ recto: String(c.recto), verso: String(c.verso) }));
+      if (!cartes.length) throw { code: "invalid_json" };
+      m.flash.unshift({ id: uid(), titre: titleFor(m, ch), cartes });
+    } else {
+      const r = await ask(base + `Crée un quiz de 10 questions à choix multiples sur ces cours, de difficulté progressive.
+Chaque question a 4 choix et une seule bonne réponse ; les mauvais choix doivent être plausibles. Ajoute une courte explication.
+Réponds uniquement en JSON : {"questions": [{"question": string, "choix": [string, string, string, string], "bonne": number (0 à 3), "explication": string}]}`, { json: true });
+      const questions = (r?.questions || []).filter(q => q?.question && Array.isArray(q.choix) && q.choix.length >= 2 && Number.isInteger(q.bonne) && q.bonne >= 0 && q.bonne < q.choix.length)
+        .map(q => ({ question: String(q.question), choix: q.choix.map(String), bonne: q.bonne, explication: String(q.explication || "") }));
+      if (!questions.length) throw { code: "invalid_json" };
+      m.quiz.unshift({ id: uid(), titre: titleFor(m, ch), questions });
+    }
+    save(); render();
+  });
+  gen.append(el("p", { class: "mute" }, "Choisis les cours (tous sont cochés : toute la matière), puis crée des flashcards ou un quiz."), ul,
+    el("div", { class: "row" }, button("🃏 Créer des flashcards", "big", create("flash")), button("❓ Créer un quiz", "big", create("quiz"))));
+  const items = (list, kind, label, info) => list.map((x, i) => el("section", { class: "sheet" }, html("h2", "", `${label} : ${txt(x.titre)}`),
+    el("p", { class: "mute" }, info(x)),
+    el("div", { class: "row" }, button("▶ Commencer", "", () => { play = { kind, id: x.id }; render(); scrollTo({ top: 0 }); }),
+      twoTap("🗑 Supprimer", "Toucher encore pour confirmer", "danger", () => { list.splice(i, 1); save(); render(); }))));
+  return [back("← Mes cours", () => go("list")), gen,
+    ...items(m.flash, "flash", "🃏 Flashcards", x => `${x.cartes.length} cartes`),
+    ...items(m.quiz, "quiz", "❓ Quiz", x => `${x.questions.length} questions` + (x.best != null ? ` · meilleur score : ${x.best}/${x.questions.length}` : ""))];
+}
+
+function flashPlayer(deck) {
+  const box = el("section", { class: "sheet" });
+  let order = deck.cartes.map((_, i) => i), pos = 0, flipped = false, missed = [];
+  const draw = () => {
+    box.innerHTML = ""; box.append(html("h2", "", `🃏 ${txt(deck.titre)}`));
+    if (pos >= order.length) {
+      box.append(el("p", { class: "score" }, `${order.length - missed.length} / ${order.length}`),
+        el("p", { class: "mute", style: "text-align:center" }, `Tu savais ${order.length - missed.length} cartes sur ${order.length}.`),
+        el("div", { class: "row" },
+          ...(missed.length ? [button(`🔁 Revoir les ${missed.length} cartes à revoir`, "", () => { order = missed; missed = []; pos = 0; flipped = false; draw(); })] : []),
+          button("Recommencer toutes les cartes", "ghost", () => { order = deck.cartes.map((_, i) => i); missed = []; pos = 0; flipped = false; draw(); })));
+      return;
+    }
+    const c = deck.cartes[order[pos]];
+    const card = el("div", { class: "card" }, el("p", { class: "mute" }, `Carte ${pos + 1} sur ${order.length}`), html("div", "cours", md(c.recto)));
+    box.append(card);
+    if (!flipped) box.append(el("div", { class: "row" }, button("🔄 Retourner la carte", "big", () => { flipped = true; draw(); })));
+    else {
+      card.append(html("div", "cours verso", md(c.verso)));
+      const next = (knew) => { if (!knew) missed.push(order[pos]); pos++; flipped = false; draw(); };
+      box.append(el("div", { class: "row" }, button("✓ Je savais", "big", () => next(true)), button("✗ À revoir", "danger big", () => next(false))));
+    }
+  };
+  draw(); return box;
+}
+
+function quizPlayer(qz) {
+  const box = el("section", { class: "sheet" });
+  let pos = 0, score = 0;
+  const draw = () => {
+    box.innerHTML = ""; box.append(html("h2", "", `❓ ${txt(qz.titre)}`));
+    if (pos >= qz.questions.length) {
+      qz.best = Math.max(qz.best ?? 0, score); save();
+      box.append(el("p", { class: "score" }, `${score} / ${qz.questions.length}`),
+        el("p", { class: "mute", style: "text-align:center" }, score === qz.questions.length ? "Parfait, bravo !" : "Relis les explications et recommence pour progresser."),
+        el("div", { class: "row" }, button("🔁 Recommencer le quiz", "", () => { pos = 0; score = 0; draw(); })));
+      return;
+    }
+    const q = qz.questions[pos];
+    const choices = el("div", { class: "choices" });
+    box.append(el("p", { class: "mute" }, `Question ${pos + 1} sur ${qz.questions.length} · score : ${score}`), html("div", "cours", md(q.question)), choices);
+    q.choix.forEach((label, i) => choices.append(button(`${"ABCD"[i] || i + 1}. ${label}`, "", () => {
+      if (choices.dataset.done) return; choices.dataset.done = "1";
+      if (i === q.bonne) score++;
+      [...choices.children].forEach((b, j) => { b.disabled = j !== i && j !== q.bonne; if (j === q.bonne) b.classList.add("right"); else if (j === i) b.classList.add("wrong"); });
+      box.append(html("div", "answer cours", `<b>${i === q.bonne ? "✅ Bonne réponse !" : "❌ Pas tout à fait."}</b>${md(q.explication)}`),
+        el("div", { class: "row" }, button(pos + 1 < qz.questions.length ? "Question suivante →" : "Voir mon score", "big", () => { pos++; draw(); })));
+    })));
+  };
+  draw(); return box;
+}
+
 // ---------- revision sheets ----------
 function fichesView() {
   const m = mat();
@@ -429,14 +549,11 @@ function fichesView() {
     gen.append(el("p", { class: "empty mute" }, "Ajoute d'abord un cours dans cette matière pour créer une fiche."), button("➕ Ajouter un cours", "", () => go("add")));
     return [gen];
   }
-  const pick = el("ul", { class: "pick" });
-  m.cours.forEach((c, i) => pick.append(el("li", {}, el("label", {}, el("input", { type: "checkbox", value: i, checked: "" }), txt(c.titre)))));
+  const { ul: pick, chosen: chosenCourses } = pickCourses(m);
   gen.append(el("p", { class: "mute" }, "Choisis les cours à réviser (tous sont cochés : fiche sur toute la matière)."), pick,
     el("div", { class: "row" }, button("📝 Créer la fiche de révision", "big", (b) => busy(b, "⏳ Le prof rédige ta fiche de révision…", async () => {
-      const chosen = [...pick.querySelectorAll("input:checked")].map(x => m.cours[Number(x.value)]);
-      if (!chosen.length) throw { message: "Coche au moins un cours." };
-      const content = chosen.map(c => `## ${c.titre}\n` + c.blocs.map(b => `### ${b.titre}\n${b.cours || b.notions}`).join("\n")).join("\n\n").slice(0, 200000);
-      const titre = chosen.length === m.cours.length ? `${m.nom} : toute la matière` : chosen.map(c => c.titre).join(", ");
+      const chosen = chosenCourses();
+      const content = courseText(chosen), titre = titleFor(m, chosen);
       const fiche = await ask(`Voici des cours de ${m.nom} :\n\n${content}
 
 Rédige une fiche de révision claire et compacte (1 à 2 pages) : notions clés, définitions, formules et règles à retenir,
